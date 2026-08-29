@@ -8,7 +8,8 @@ SpeakLoop 是面向中高级英语学习者的 AI 口语修复系统。它把真
 
 ## 1. Judge in 3 Minutes
 
-1. 打开在线演示地址（发布后补充）。
+1. 打开在线演示地址：<https://4173-ffad62e5-caff-4782-958e-91b487321151.proxy.daytona.works>
+   （运行在 Daytona 沙箱中。首次打开会出现一次 Daytona 预览警告页，点 "I Understand, Continue" 即可。）
 2. 进入 `Practice`，用文字或麦克风回答一个真实问题。
 3. 查看 AI 给出的自然纠正、简短口语版本和追问。
 4. 重复正确表达，将词汇或短语保存到个人资产库。
