@@ -2,42 +2,42 @@
 
 > Turn every conversation into measurable speaking progress.
 
-SpeakLoop 是面向中高级英语学习者的 AI 口语修复系统。它把真实对话中的错误、纠正、优质表达和次日复习连接成一个闭环，让一次性的口语练习沉淀为可以持续复用的个人语言资产。
+SpeakLoop is an AI-powered speaking improvement system for intermediate and advanced English learners. It connects mistakes, corrections, stronger phrasing, and next-day review from real conversations into a continuous loop, turning one-off speaking practice into a reusable personal language asset.
 
 ![SpeakLoop Practice](artifacts/speakloop-practice.png)
 
-## 1. Judge in 3 Minutes
+## 1. Evaluate It in 3 Minutes
 
-1. 打开在线演示地址：<https://4173-ffad62e5-caff-4782-958e-91b487321151.proxy.daytona.works>
-   （运行在 Daytona 沙箱中。首次打开会出现一次 Daytona 预览警告页，点 "I Understand, Continue" 即可。）
-2. 进入 `Practice`，用文字或麦克风回答一个真实问题。
-3. 查看 AI 给出的自然纠正、简短口语版本和追问。
-4. 重复正确表达，将词汇或短语保存到个人资产库。
-5. 打开 `Weekly`，点击 `Generate AI review`。
-6. 查看生成的次日练习计划。
-7. 在任意网页上双击一个单词，或悬停视频字幕，把它连同原句存进 `Assets`。
+1. Open the live demo: <https://4173-ffad62e5-caff-4782-958e-91b487321151.proxy.daytona.works>
+   (It runs in a Daytona sandbox. On your first visit, Daytona displays a preview warning page; click "I Understand, Continue" to proceed.)
+2. Go to `Practice` and answer a real question by typing or using your microphone.
+3. Review the AI-generated natural correction, shorter spoken version, and follow-up question.
+4. Repeat the corrected expression and save useful words or phrases to your personal asset library.
+5. Open `Weekly` and click `Generate AI review`.
+6. Review the generated practice plan for the next day.
+7. On any webpage, double-click a word or hover over video subtitles to save it with its original sentence to `Assets`.
+8. Review this repository's Daytona configuration and reproducible tests.
 
 ### 3-Minute Demo Video
 
-[Watch or download the SpeakingLoop demo](demo/SpeakingLoop-3min-demo.mp4) · [English subtitles](demo/SpeakingLoop-3min-demo.en.srt)
-8. 查看本仓库的 Daytona 配置和可复现测试。
+[Watch or download the SpeakLoop demo](demo/SpeakingLoop-3min-demo.mp4) · [English subtitles](demo/SpeakingLoop-3min-demo.en.srt)
 
-## 2. 产品价值
+## 2. Product Value
 
-传统口语应用往往止步于“聊完一次”。SpeakLoop 把学习过程设计成连续循环：
+Traditional speaking apps often stop when the conversation ends. SpeakLoop turns learning into a continuous cycle:
 
 ```text
-真实输入 → 开口表达 → 发现问题 → 修复并复述 → 保存表达 → 次日复习 → 再次使用
+Real-world input → Speak → Identify issues → Correct and repeat → Save expressions → Review the next day → Reuse
 ```
 
-核心价值包括：
+Its core benefits include:
 
-- 即时修复：只纠正最影响自然度和理解的关键问题。
-- 可说表达：同时提供自然版本和更短、更容易复述的版本。
-- 个人资产：保存词汇、原始语境、发音和使用记录，而不是收藏孤立单词。
-- 学习复利：AI 根据本次会话生成下一次练习任务，推动表达真正进入主动词汇。
+- **Immediate correction:** Focuses only on the issues that most affect naturalness and comprehension.
+- **Speakable phrasing:** Provides both a natural version and a shorter version that is easier to repeat.
+- **Personal assets:** Saves vocabulary, original context, pronunciation, and usage history instead of isolated words.
+- **Compounding progress:** Uses AI to generate the next practice task from each session, helping new expressions become part of the learner's active vocabulary.
 
-## 3. 技术架构
+## 3. Architecture
 
 ```mermaid
 flowchart LR
@@ -50,51 +50,51 @@ flowchart LR
     H -. health check and preview .-> C
 ```
 
-### Daytona 的作用
+### How Daytona Is Used
 
-- 从同一份仓库创建隔离、可复现的产品环境。
-- 通过 Dockerfile 启动完整 Web 产品。
-- 使用健康检查验证运行状态。
-- 生成评委可访问的临时预览地址。
-- 演示结束后自动停止和归档，控制资源成本。
+- Creates an isolated, reproducible product environment from the same repository.
+- Starts the complete web product from the Dockerfile.
+- Verifies runtime status with health checks.
+- Generates a temporary preview URL accessible to reviewers.
+- Automatically stops and archives the sandbox after the demo to control resource costs.
 
-### 模型策略
+### Model Strategy
 
-按"哪个凭证可用"选择 provider，同一时刻只用一个：
+The application selects a provider based on available credentials and uses only one provider at a time:
 
-| 场景 | provider |
+| Scenario | Provider |
 | --- | --- |
-| 配了 `OPENAI_API_KEY` 且有额度 | OpenAI（质量优先） |
-| OpenAI 余额耗尽，或只配了 `GEMINI_API_KEY` | Gemini（免费层，无需信用卡） |
-| 两个都没配 | 直接报错，不伪装 |
+| `OPENAI_API_KEY` is configured and has available quota | OpenAI (quality first) |
+| OpenAI quota is exhausted, or only `GEMINI_API_KEY` is configured | Gemini (free tier, no credit card required) |
+| Neither key is configured | Return an explicit error; never simulate a response |
 
-- 实时教练、纠错、追问走 strong 路由；次日复习、周报、词汇卡片走更便宜的 mini 路由。两个 provider 都遵守这个划分。
-- 语音识别和朗读**只有 OpenAI**。只配 Gemini 时，麦克风和朗读不可用，界面会说明原因。
-- OpenAI 返回 `insufficient_quota` 时自动切到 Gemini，并在界面标记 `fallback`；**其他任何错误都不切换**，直接显示真实报错——网络问题被当成"降级"处理只会掩盖故障。
-- 一旦某个 provider 报过余额耗尽，本进程后续请求直接跳过它，不再浪费一次失败往返。
+- Live coaching, corrections, and follow-up questions use the strong model route. Next-day reviews, weekly reports, and vocabulary cards use the lower-cost mini route. Both providers follow this split.
+- Speech recognition and text-to-speech are available **only through OpenAI**. If only Gemini is configured, microphone input and audio playback are unavailable, and the interface explains why.
+- If OpenAI returns `insufficient_quota`, the application automatically switches to Gemini and labels the response as a `fallback`. **No other error triggers a provider switch**; the actual error is displayed instead, because treating a network failure as a fallback would hide the underlying problem.
+- After a provider reports exhausted quota, the current process skips it for subsequent requests to avoid another failed round trip.
 
-Gemini 免费 key 在 <https://aistudio.google.com/apikey> 获取，每天 1,500 次请求。
+Get a free Gemini API key at <https://aistudio.google.com/apikey>. The free tier supports up to 1,500 requests per day.
 
-> 早期版本把批处理任务路由到 Nosana GPU 上的 Qwen。该路由已从代码中移除，
-> `nosana/ollama.json` 仅作为历史部署清单保留，当前构建不会调用它。
+> An earlier version routed batch tasks to Qwen on a Nosana GPU. That route has been removed from the code.
+> `nosana/ollama.json` remains only as a historical deployment manifest and is not used by the current build.
 
-## 4. 本地运行
+## 4. Run Locally
 
-需要 Node.js 20 或更高版本。
+Node.js 20 or later is required.
 
 ```bash
 cp .env.example .env
-# 在 .env 中填写 OPENAI_API_KEY。
+# Add OPENAI_API_KEY to .env.
 npm start
 ```
 
-打开：
+Open:
 
 ```text
 http://127.0.0.1:4173
 ```
 
-验证：
+Verify:
 
 ```bash
 npm test
@@ -102,20 +102,20 @@ npm run smoke
 curl http://127.0.0.1:4173/api/health
 ```
 
-即使没有 OpenAI Key，页面、健康检查、词汇捕获和复习数据流程仍可运行；实时转录、语音合成和 AI 教练需要有效的 OpenAI Key。
+Without an OpenAI API key, the interface, health checks, vocabulary capture, and review data flow still work. Live transcription, text-to-speech, and AI coaching require a valid OpenAI API key.
 
-## 5. Docker 运行
+## 5. Run with Docker
 
 ```bash
 docker build -t speakloop .
 docker run --rm -p 4173:4173 --env-file .env speakloop
 ```
 
-容器监听 `0.0.0.0:4173`，并通过 `/api/health` 提供健康状态。为了适应临时沙箱，默认把运行时词汇数据写入 `/tmp/speakloop`；正式多用户产品应替换为外部数据库。
+The container listens on `0.0.0.0:4173` and exposes health status at `/api/health`. To support temporary sandboxes, runtime vocabulary data is written to `/tmp/speakloop` by default. A production multi-user deployment should replace this with an external database.
 
-## 6. Daytona 部署
+## 6. Deploy to Daytona
 
-完整操作见 [DEPLOYMENT.md](DEPLOYMENT.md)。最短路径：
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete procedure. The shortest path is:
 
 ```bash
 daytona create \
@@ -133,15 +133,15 @@ daytona create \
 daytona preview-url speakloop-demo --port 4173 --expires 21600
 ```
 
-API Key 只能配置在 Daytona 的 Secret/环境变量中，不得写入仓库、Dockerfile 或截图。
+API keys must be configured only through Daytona Secrets or environment variables. Never commit them to the repository, include them in the Dockerfile, or expose them in screenshots.
 
-本次已在 `us` Container 区域完成真实部署和浏览器验收。Daytona CLI `v0.207+` 的 `--memory` 单位为 MB；部分旧版 CLI 使用 GB，执行前请以 `daytona create --help` 的本机输出为准。
+This project has been deployed and validated in a browser in Daytona's `us` Container region. In Daytona CLI `v0.207+`, `--memory` is specified in MB; some older CLI versions use GB. Check the local output of `daytona create --help` before running the command.
 
-## 7. Nosana 部署（历史，当前构建未接入）
+## 7. Nosana Deployment (Legacy; Not Used by the Current Build)
 
-> 下面的步骤来自早期版本。当前代码已移除 Qwen/Ollama 路由，照做不会改变应用行为。
+> The following steps apply to an earlier version. The current code no longer includes the Qwen/Ollama route, so following them will not change the application's behavior.
 
-GPU Job 定义位于 [nosana/ollama.json](nosana/ollama.json)。在 Nosana Dashboard 中选择当前有可用节点的 GPU Market，然后执行：
+The GPU job definition is located at [nosana/ollama.json](nosana/ollama.json). In the Nosana Dashboard, select a GPU Market with an available node, then run:
 
 ```bash
 npm install -g @nosana/cli
@@ -151,7 +151,7 @@ nosana job post \
   --timeout 60
 ```
 
-把任务返回的 Ollama 服务地址写入 Daytona Secret：
+Add the Ollama service URL returned by the job to Daytona Secrets:
 
 ```env
 ENABLE_QWEN=true
@@ -163,7 +163,7 @@ QWEN_TEXT_MODEL_STANDARD=qwen3:8b
 QWEN_TEXT_MODEL_CHEAP=qwen3:8b
 ```
 
-GPU Market ID 会随可用节点变化，因此仓库不写死 Market。启动任务后应先测试：
+GPU Market IDs change with node availability, so the repository does not hard-code one. After starting the job, test it first:
 
 ```bash
 curl "$OLLAMA_BASE_URL/api/tags"
@@ -171,44 +171,44 @@ curl "$OLLAMA_BASE_URL/api/tags"
 
 ## 8. API
 
-| Endpoint | Method | 用途 |
+| Endpoint | Method | Purpose |
 |---|---:|---|
-| `/api/health` | GET | 沙箱和容器健康检查 |
-| `/api/ai/chat` | POST | 实时口语教练与纠错 |
-| `/api/transcribe` | POST | 英语语音转录 |
-| `/api/tts` | POST | 纠正句与追问语音 |
-| `/api/review/generate` | POST | 次日复习计划 |
-| `/api/capture` | POST | 保存词汇或表达 |
-| `/api/vocabulary` | GET | 获取个人表达资产 |
-| `/api/review/vocabulary` | GET | 获取到期复习任务 |
+| `/api/health` | GET | Sandbox and container health check |
+| `/api/ai/chat` | POST | Live speaking coach and corrections |
+| `/api/transcribe` | POST | English speech transcription |
+| `/api/tts` | POST | Audio for corrected sentences and follow-up questions |
+| `/api/review/generate` | POST | Next-day review plan |
+| `/api/capture` | POST | Save vocabulary or expressions |
+| `/api/vocabulary` | GET | Retrieve personal expression assets |
+| `/api/review/vocabulary` | GET | Retrieve due review tasks |
 
-## 9. 环境变量
+## 9. Environment Variables
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 |---|---|---|
-| `HOST` | `0.0.0.0` | 服务监听地址 |
-| `PORT` | `4173` | 服务端口 |
-| `OPENAI_API_KEY` | 空 | OpenAI 服务密钥 |
-| `OPENAI_TEXT_MODEL_MID` | `gpt-5.5` | 实时教练与纠错模型 |
-| `GEMINI_API_KEY` | 空 | 免费层回退 provider 的 key |
-| `OPENAI_TEXT_MODEL_MINI` | `gpt-5.4-mini` | 复习、周报、词汇卡片模型 |
-| `VOCABULARY_STORE_PATH` | `data/vocabulary-store.json` | 单用户 MVP 数据文件 |
+| `HOST` | `0.0.0.0` | Server host address |
+| `PORT` | `4173` | Server port |
+| `OPENAI_API_KEY` | Empty | OpenAI API key |
+| `OPENAI_TEXT_MODEL_MID` | `gpt-5.5` | Model for live coaching and corrections |
+| `GEMINI_API_KEY` | Empty | API key for the free-tier fallback provider |
+| `OPENAI_TEXT_MODEL_MINI` | `gpt-5.4-mini` | Model for reviews, weekly reports, and vocabulary cards |
+| `VOCABULARY_STORE_PATH` | `data/vocabulary-store.json` | Data file for the single-user MVP |
 
-更多模型变量见 [.env.example](.env.example)。
+See [.env.example](.env.example) for additional model variables.
 
-## 10. 当前边界
+## 10. Current Limitations
 
-- 网页中的 `Context Capture` 使用预置字幕演示完整的悬停、保存和复习流程；当前标签页音频捕获仍需通过浏览器扩展桥接。
-- JSON 词汇存储适合单场演示，不适合正式多用户生产环境。
-- 麦克风功能需要 HTTPS 或 localhost，并需要用户授权。
+- `Context Capture` in the web app uses sample subtitles to demonstrate the complete hover, save, and review flow. Capturing audio from the current browser tab still requires the browser extension bridge.
+- The JSON vocabulary store is suitable for a single-session demo, not a production multi-user environment.
+- Microphone features require HTTPS or localhost and user permission.
 
 ## 11. Repository Map
 
 ```text
 .
 ├── src/                     # Web UI
-├── lib/                     # OpenAI calls, review and vocabulary logic
-├── apps/browser-extension/  # Captions and global expression capture
+├── lib/                     # OpenAI calls, review, and vocabulary logic
+├── apps/browser-extension/  # Caption and global expression capture
 ├── nosana/ollama.json       # Legacy GPU workload, not used by the current build
 ├── scripts/smoke-test.mjs   # End-to-end service smoke test
 ├── test/                    # Model path tests
