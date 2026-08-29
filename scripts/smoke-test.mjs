@@ -8,10 +8,42 @@ const host = "127.0.0.1";
 const port = String(4300 + Math.floor(Math.random() * 500));
 const temporaryDirectory = await mkdtemp(join(tmpdir(), "speakloop-smoke-"));
 
-// Stands in for the OpenAI Responses API so the smoke test exercises the real
-// request path without spending tokens.
+// Stands in for both upstreams so the smoke test exercises the real request
+// paths without spending tokens. OpenAI answers with an out-of-credit error so
+// the run also proves the Gemini fallback works end to end.
+const reviewPayload = () => JSON.stringify({
+  summary: "Your product explanation became clearer after the correction.",
+  topIssue: "Subject-verb agreement in longer answers.",
+  nextActions: [
+    "Repeat the corrected sentence three times.",
+    "Answer once using two short clauses.",
+    "Reuse decision latency in a new example.",
+  ],
+  practicePrompt: "Explain one AI deployment risk in two short sentences.",
+});
+
 const fakeOpenAI = createServer(async (request, response) => {
   if (!request.url.endsWith("/responses") || request.method !== "POST") {
+    response.writeHead(404).end();
+    return;
+  }
+  for await (const _chunk of request) {
+    // Drain the request body.
+  }
+  response.writeHead(429, { "Content-Type": "application/json" });
+  response.end(
+    JSON.stringify({
+      error: {
+        message: "You have no credits remaining.",
+        type: "insufficient_quota",
+        code: "credit_balance_exhausted",
+      },
+    }),
+  );
+});
+
+const fakeGemini = createServer(async (request, response) => {
+  if (!request.url.includes(":generateContent") || request.method !== "POST") {
     response.writeHead(404).end();
     return;
   }
@@ -21,17 +53,8 @@ const fakeOpenAI = createServer(async (request, response) => {
   response.writeHead(200, { "Content-Type": "application/json" });
   response.end(
     JSON.stringify({
-      output_text: JSON.stringify({
-        summary: "Your product explanation became clearer after the correction.",
-        topIssue: "Subject-verb agreement in longer answers.",
-        nextActions: [
-          "Repeat the corrected sentence three times.",
-          "Answer once using two short clauses.",
-          "Reuse decision latency in a new example.",
-        ],
-        practicePrompt: "Explain one AI deployment risk in two short sentences.",
-      }),
-      usage: { input_tokens: 120, output_tokens: 80 },
+      candidates: [{ content: { parts: [{ text: reviewPayload() }] } }],
+      usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 80 },
     }),
   );
 });
@@ -40,7 +63,12 @@ await new Promise((resolve, reject) => {
   fakeOpenAI.once("error", reject);
   fakeOpenAI.listen(0, host, resolve);
 });
+await new Promise((resolve, reject) => {
+  fakeGemini.once("error", reject);
+  fakeGemini.listen(0, host, resolve);
+});
 const openAIPort = fakeOpenAI.address().port;
+const geminiPort = fakeGemini.address().port;
 
 const child = spawn(process.execPath, ["server.mjs"], {
   cwd: process.cwd(),
@@ -51,6 +79,8 @@ const child = spawn(process.execPath, ["server.mjs"], {
     VOCABULARY_STORE_PATH: join(temporaryDirectory, "vocabulary-store.json"),
     OPENAI_API_KEY: "smoke-test-key",
     OPENAI_BASE_URL: `http://${host}:${openAIPort}/v1`,
+    GEMINI_API_KEY: "smoke-test-gemini-key",
+    GEMINI_BASE_URL: `http://${host}:${geminiPort}/v1beta`,
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -77,7 +107,9 @@ async function waitForServer() {
 try {
   const health = await waitForServer();
   if (health.status !== "ok") throw new Error("Health endpoint returned a non-ok status");
-  if (health.provider !== "openai") throw new Error("Health endpoint no longer reports OpenAI");
+  if (!health.providers?.openai || !health.providers?.gemini) {
+    throw new Error(`Health endpoint did not report both providers: ${JSON.stringify(health.providers)}`);
+  }
 
   const home = await fetch(baseUrl);
   if (!home.ok || !(await home.text()).includes("SpeakLoop")) {
@@ -124,16 +156,18 @@ try {
     }),
   });
   const reviewResult = await review.json();
-  if (!review.ok || reviewResult.provider !== "openai" || reviewResult.review.nextActions.length !== 3) {
-    throw new Error(`OpenAI review contract failed: ${JSON.stringify(reviewResult)}`);
+  // OpenAI is out of credit in this run, so a correct system answers on Gemini.
+  if (!review.ok || reviewResult.provider !== "gemini" || reviewResult.review.nextActions.length !== 3) {
+    throw new Error(`Quota fallback to Gemini failed: ${JSON.stringify(reviewResult)}`);
   }
 
   console.log(JSON.stringify({
     success: true,
-    checks: ["health", "home", "protected-files", "webpage-capture", "vocabulary", "openai-review"],
+    checks: ["health", "home", "protected-files", "webpage-capture", "vocabulary", "openai-quota-fallback-to-gemini"],
     health,
   }, null, 2));
 } finally {
   child.kill("SIGTERM");
   fakeOpenAI.close();
+  fakeGemini.close();
 }

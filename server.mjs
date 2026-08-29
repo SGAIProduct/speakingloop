@@ -30,7 +30,7 @@ function loadLocalEnv(envPath = join(process.cwd(), ".env")) {
 loadLocalEnv();
 
 const { ModelRouter } = await import("./lib/ai/model-router.mjs");
-const { modelRoutingConfig, envDefaults, modelEnv } = await import(
+const { modelRoutingConfig, envDefaults, modelEnv, providerAvailability } = await import(
   "./lib/ai/model-routing-config.mjs"
 );
 const { generateTTSWithCache } = await import("./lib/ai/tts-generator.mjs");
@@ -614,6 +614,7 @@ function handleRouterConfig(response) {
       modelEnv,
       modelRoutingConfig,
       openAIConfigured: Boolean(process.env.OPENAI_API_KEY),
+      providers: providerAvailability(),
       logs: modelRouter.logs(),
     }),
     { "Content-Type": "application/json; charset=utf-8" },
@@ -655,7 +656,7 @@ createServer(async (request, response) => {
       status: "ok",
       product: "SpeakLoop",
       version: "0.1.0",
-      provider: "openai",
+      providers: providerAvailability(),
       openAIConfigured: Boolean(process.env.OPENAI_API_KEY),
       uptimeSeconds: Math.round(process.uptime()),
     });
@@ -739,8 +740,13 @@ createServer(async (request, response) => {
   await serveStatic(request, response);
 }).listen(port, host, () => {
   console.log(`SpeakLoop running at http://${host}:${port}`);
-  console.log(`OpenAI configured: ${Boolean(process.env.OPENAI_API_KEY)}`);
-  console.log("OpenAI-only model path enabled at /api/ai/chat");
+  const available = providerAvailability();
+  console.log(`OpenAI configured: ${available.openai}`);
+  console.log(`Gemini configured: ${available.gemini}${available.gemini ? " (free tier fallback)" : ""}`);
+  if (!available.openai && !available.gemini) {
+    console.log("WARNING: no model provider configured — coaching and vocabulary cards will fail.");
+  }
+  console.log("Model path enabled at /api/ai/chat (OpenAI preferred, Gemini fallback)");
   console.log("OpenAI transcription enabled at /api/transcribe");
   console.log("Cached OpenAI TTS enabled at /api/tts");
   console.log("Global vocabulary capture enabled at /api/capture");

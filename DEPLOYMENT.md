@@ -79,11 +79,11 @@ OPENAI_REALTIME_MODEL=gpt-5.5
 OPENAI_TEXT_MODEL_MINI=gpt-5.4-mini
 OPENAI_TRANSCRIPTION_MODEL=gpt-4o-transcribe
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
+GEMINI_API_KEY=<secret, 免费层，OpenAI 没额度时接管>
 ```
 
-只有 `OPENAI_API_KEY` 是必填的，其余都有默认值。不要设置任何 `ENABLE_QWEN` /
-`OLLAMA_BASE_URL` / `DEFAULT_*_PROVIDER`：这些变量在当前构建里已经没有读取方，
-设置了只会让人误以为还有第二个 provider。
+`OPENAI_API_KEY` 和 `GEMINI_API_KEY` 至少要有一个。两个都配时优先 OpenAI，余额耗尽自动切 Gemini。
+不要设置任何 `ENABLE_QWEN` / `OLLAMA_BASE_URL` / `DEFAULT_*_PROVIDER`：这些变量在当前构建里已经没有读取方。
 
 不要把 Secret 直接拼进截图、README 或公开的 shell 历史。
 

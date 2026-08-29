@@ -1192,7 +1192,7 @@ function practice() {
             </div>
             <button type="button" data-refresh-models>Check OpenAI connection</button>
             <small class="${state.llmStatusTone}">${escapeHtml(state.llmStatus)}</small>
-            <small>SpeakLoop runs on OpenAI only. There is no silent model fallback.</small>
+            <small>OpenAI when it has credit, otherwise the Gemini free tier. The panel above always names the provider that actually answered.</small>
           </div>
         </div>
         <div class="practice-phase ${state.practicePhase}">
@@ -1293,15 +1293,15 @@ function practice() {
         <h2 class="aside-section-title">AI Coach</h2>
         <article class="note blue">
           <span>Routing principle</span>
-          <p>All tasks use OpenAI. Practice uses the mid-tier GPT route; reports, reviews, and vocabulary extraction use the mini route.</p>
+          <p>Practice uses the strong route; reports, reviews and vocabulary cards use the cheaper one. Whichever provider is serving, the split is the same.</p>
         </article>
         <article class="note warning">
           <span>Fallback</span>
-          <p>There is no second provider. If OpenAI is unreachable or the key is missing, SpeakLoop shows the real error instead of quietly answering with a weaker model.</p>
+          <p>If OpenAI runs out of credit, SpeakLoop switches to Gemini and labels the reply as a fallback. Any other failure is shown as the real error rather than answered by a weaker model.</p>
         </article>
         <article class="note">
           <span>Setup</span>
-          <p>Set OPENAI_API_KEY on the server. Model IDs remain configurable through environment variables.</p>
+          <p>Set OPENAI_API_KEY, or GEMINI_API_KEY for the free tier. Model IDs stay configurable through environment variables.</p>
         </article>
         <article class="note">
           <span>Last calls</span>
@@ -1976,10 +1976,14 @@ async function sendChatMessage() {
       continueConversation(coach);
     }
   } catch (error) {
-    const isMissingOpenAIKey = String(error.message || "").includes("OPENAI_API_KEY");
-    const providerMessage = isMissingOpenAIKey
-      ? "GPT is not connected yet. Add your OpenAI API key to the local .env file, restart SpeakLoop, then try again."
-      : `The GPT request could not run: ${error.message}`;
+    const failure = String(error.message || "");
+    const isMissingKey = /No model provider is configured|OPENAI_API_KEY|GEMINI_API_KEY/.test(failure);
+    const isOutOfCredit = /insufficient_quota|credit_balance_exhausted|no credits remaining|exceeded your current quota/i.test(failure);
+    const providerMessage = isMissingKey
+      ? "No model is connected yet. Add OPENAI_API_KEY — or GEMINI_API_KEY for the free tier — to the local .env file, restart SpeakLoop, then try again."
+      : isOutOfCredit
+        ? "Both providers are out of credit. Top up the OpenAI account, or add a GEMINI_API_KEY from Google AI Studio, which is free."
+        : `The coaching request could not run: ${failure}`;
     state.chatMessages = [
       ...state.chatMessages,
       {
@@ -1988,9 +1992,11 @@ async function sendChatMessage() {
         content: providerMessage,
       },
     ];
-    state.llmStatus = isMissingOpenAIKey
-      ? "OpenAI key missing on local server"
-      : `OpenAI unavailable · ${error.message}`;
+    state.llmStatus = isMissingKey
+      ? "No model provider configured on the server"
+      : isOutOfCredit
+        ? "Out of credit on every configured provider"
+        : `Provider unavailable · ${failure}`;
     state.llmStatusTone = "warning";
     state.practicePhase = "answer";
     state.pendingCorrection = null;

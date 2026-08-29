@@ -60,13 +60,20 @@ flowchart LR
 
 ### 模型策略
 
-当前构建只使用 OpenAI，没有第二个 provider，也没有静默降级：
+按"哪个凭证可用"选择 provider，同一时刻只用一个：
 
-- 实时口语教练、纠错、追问走 `OPENAI_TEXT_MODEL_MID`。
-- 次日复习、周报、词汇卡片走更便宜的 `OPENAI_TEXT_MODEL_MINI`。
-- 语音识别用 `gpt-4o-transcribe`，朗读用 `gpt-4o-mini-tts`（带本地缓存）。
+| 场景 | provider |
+| --- | --- |
+| 配了 `OPENAI_API_KEY` 且有额度 | OpenAI（质量优先） |
+| OpenAI 余额耗尽，或只配了 `GEMINI_API_KEY` | Gemini（免费层，无需信用卡） |
+| 两个都没配 | 直接报错，不伪装 |
 
-如果 key 缺失或 OpenAI 不可达，界面会显示真实错误，而不是用一个更弱的模型伪装成正常回答。
+- 实时教练、纠错、追问走 strong 路由；次日复习、周报、词汇卡片走更便宜的 mini 路由。两个 provider 都遵守这个划分。
+- 语音识别和朗读**只有 OpenAI**。只配 Gemini 时，麦克风和朗读不可用，界面会说明原因。
+- OpenAI 返回 `insufficient_quota` 时自动切到 Gemini，并在界面标记 `fallback`；**其他任何错误都不切换**，直接显示真实报错——网络问题被当成"降级"处理只会掩盖故障。
+- 一旦某个 provider 报过余额耗尽，本进程后续请求直接跳过它，不再浪费一次失败往返。
+
+Gemini 免费 key 在 <https://aistudio.google.com/apikey> 获取，每天 1,500 次请求。
 
 > 早期版本把批处理任务路由到 Nosana GPU 上的 Qwen。该路由已从代码中移除，
 > `nosana/ollama.json` 仅作为历史部署清单保留，当前构建不会调用它。
@@ -183,6 +190,7 @@ curl "$OLLAMA_BASE_URL/api/tags"
 | `PORT` | `4173` | 服务端口 |
 | `OPENAI_API_KEY` | 空 | OpenAI 服务密钥 |
 | `OPENAI_TEXT_MODEL_MID` | `gpt-5.5` | 实时教练与纠错模型 |
+| `GEMINI_API_KEY` | 空 | 免费层回退 provider 的 key |
 | `OPENAI_TEXT_MODEL_MINI` | `gpt-5.4-mini` | 复习、周报、词汇卡片模型 |
 | `VOCABULARY_STORE_PATH` | `data/vocabulary-store.json` | 单用户 MVP 数据文件 |
 
