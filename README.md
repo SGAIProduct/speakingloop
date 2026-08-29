@@ -8,8 +8,8 @@ SpeakLoop is an AI-powered speaking improvement system for intermediate and adva
 
 ## 1. Evaluate It in 3 Minutes
 
-1. Open the live demo: <https://4173-ffad62e5-caff-4782-958e-91b487321151.proxy.daytona.works>
-   (It runs in a Daytona sandbox. On your first visit, Daytona displays a preview warning page; click "I Understand, Continue" to proceed.)
+1. Open the product URL: <https://4173-pik74aplth0yeytz.daytonaproxy01.net>
+   **Note:** The product URL runs in a Daytona sandbox. On your first visit, Daytona displays a preview warning page; click "I Understand, Continue" to proceed.
 2. Go to `Practice` and answer a real question by typing or using your microphone.
 3. Review the AI-generated natural correction, shorter spoken version, and follow-up question.
 4. Repeat the corrected expression and save useful words or phrases to your personal asset library.
