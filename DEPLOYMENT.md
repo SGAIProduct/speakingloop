@@ -73,14 +73,17 @@ daytona create \
 HOST=0.0.0.0
 PORT=4173
 OPENAI_API_KEY=<secret>
-ENABLE_QWEN=true
-DEFAULT_REPORT_PROVIDER=qwen
-DEFAULT_REVIEW_PROVIDER=qwen
-DEFAULT_VOCAB_PROVIDER=qwen
-OLLAMA_BASE_URL=https://<nosana-service-url>
-QWEN_TEXT_MODEL_STANDARD=qwen3:8b
-QWEN_TEXT_MODEL_CHEAP=qwen3:8b
+OPENAI_TEXT_MODEL_STRONG=gpt-5.5
+OPENAI_TEXT_MODEL_MID=gpt-5.5
+OPENAI_REALTIME_MODEL=gpt-5.5
+OPENAI_TEXT_MODEL_MINI=gpt-5.4-mini
+OPENAI_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
 ```
+
+只有 `OPENAI_API_KEY` 是必填的，其余都有默认值。不要设置任何 `ENABLE_QWEN` /
+`OLLAMA_BASE_URL` / `DEFAULT_*_PROVIDER`：这些变量在当前构建里已经没有读取方，
+设置了只会让人误以为还有第二个 provider。
 
 不要把 Secret 直接拼进截图、README 或公开的 shell 历史。
 
@@ -113,21 +116,22 @@ daytona preview-url speakloop-demo --port 4173 --expires 21600
 2. 检查首页、Practice、Assets、Review、Weekly。
 3. 麦克风录制并完成一次转录。
 4. 完成一次纠正与复述。
-5. 保存一个表达并在 Assets 中找到它。
-6. 在 Weekly 生成 AI Review。
-7. 确认结果显示 `qwen`、模型名和 latency。
-8. 重新加载页面，确认服务仍然可用。
-9. 准备一段文字输入作为麦克风或网络失败时的备用路径。
+5. 在任意网页上双击一个单词，确认弹出卡片并带原句；保存后在 Assets 的 `Captured` 里找到它。
+6. 在 Errors 页点状态按钮，确认可以在 Recurring Error / Practicing / Improved 之间切换。
+7. 在 Weekly 生成 AI Review。
+8. 确认结果显示 `openai`、模型名和 latency。
+9. 重新加载页面，确认服务仍然可用。
+10. 准备一段文字输入作为麦克风或网络失败时的备用路径。
 
 ## 6. 答辩证据
 
 准备三张不包含密钥的截图：
 
 1. Daytona 沙箱详情和健康状态。
-2. Nosana Job/节点页和运行中的 Ollama 服务。
-3. SpeakLoop Weekly 页面中的 Qwen Review 结果。
+2. 网页双击取词的悬浮卡片，以及 Assets 里对应的捕获卡片。
+3. SpeakLoop Weekly 页面中的 AI Review 结果（显示 provider、model、latency）。
 
-README 中补充：公开 GitHub 地址、Daytona 预览地址、Nosana Job/Explorer 地址和 60 秒演示 GIF。
+README 中补充：公开 GitHub 地址、Daytona 预览地址和 60 秒演示 GIF。
 
 ## 7. 关停
 
