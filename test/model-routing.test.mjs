@@ -40,6 +40,18 @@ test("Gemini serves when OpenAI has no key", async () => {
   });
 });
 
+test("a model id from the wrong provider is ignored", async () => {
+  await withEnv({ OPENAI_API_KEY: undefined, GEMINI_API_KEY: "AIza-test" }, () => {
+    const route = new ModelRouter().selectRoute({
+      taskType: "immediate_correction",
+      provider: "gemini",
+      preferredModel: "gpt-5.4-mini",
+    });
+    assert.equal(route.provider, "gemini");
+    assert.equal(route.model, modelEnv.GEMINI_TEXT_MODEL_MID);
+  });
+});
+
 test("batch tasks use the cheaper model on either provider", async () => {
   await withEnv({ OPENAI_API_KEY: "sk-test", GEMINI_API_KEY: undefined }, () => {
     assert.equal(

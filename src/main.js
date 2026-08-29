@@ -128,10 +128,10 @@ const taskTypes = [
   "vocabulary_phrase_extractor",
   "pronunciation_shadowing",
 ];
-const providerOptions = ["openai"];
+const providerOptions = ["openai", "gemini"];
 const nativeVoiceOptions = [
-  { id: "Samantha", label: "OpenAI · Native US English" },
-  { id: "Daniel", label: "OpenAI · Native UK English" },
+  { id: "Samantha", label: "US English voice" },
+  { id: "Daniel", label: "UK English voice" },
 ];
 const correctionModes = [
   { id: "strict", label: "Strict", description: "Stop and repair every meaningful error." },
@@ -278,6 +278,10 @@ const state = {
     },
   ],
 };
+
+function providerForModel(model) {
+  return /^gemini-/i.test(String(model || "")) ? "gemini" : "openai";
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -1169,7 +1173,7 @@ function practice() {
               </label>
             </div>
             <div class="selected-model">
-              <span>OpenAI model</span>
+              <span>${escapeHtml(state.preferredProvider === "gemini" ? "Gemini model" : "OpenAI model")}</span>
               <strong>${escapeHtml(state.selectedModel)}</strong>
             </div>
             <select id="model-select" data-model-select>
@@ -1187,11 +1191,11 @@ function practice() {
               <input
                 data-custom-model
                 value="${escapeHtml(state.customModel)}"
-                placeholder="Custom OpenAI model ID"
+                placeholder="Custom model ID"
               />
               <button type="button" data-use-custom-model>Use</button>
             </div>
-            <button type="button" data-refresh-models>Check OpenAI connection</button>
+            <button type="button" data-refresh-models>Check model connection</button>
             <small class="${state.llmStatusTone}">${escapeHtml(state.llmStatus)}</small>
             <small>OpenAI when it has credit, otherwise the Gemini free tier. The panel above always names the provider that actually answered.</small>
           </div>
@@ -1345,11 +1349,11 @@ function practice() {
           </select>
           <button type="button" data-read-last>Replay latest follow-up</button>
           <button type="button" data-stop-voice>Stop voice</button>
-          <p>Key corrections and follow-ups use cached OpenAI speech WAV. Advanced expressions stay text-only.</p>
+          <p>Key corrections and follow-ups use OpenAI audio when available, with a browser voice fallback.</p>
         </article>
         <article class="note">
           <span>Voice mode</span>
-          <p>Browser recognition shows live text while you speak. The full recording is checked by OpenAI after you stop when an API key is configured.</p>
+          <p>Browser recognition may show live text while you speak. After you stop, the full recording is checked by OpenAI or Gemini.</p>
         </article>
         <article class="note">
           <span>Coach behavior</span>
@@ -1700,12 +1704,18 @@ async function refreshOpenAIStatus() {
       data.modelEnv?.GEMINI_TEXT_MODEL_STRONG,
     ].filter(Boolean);
     state.availableModels = Array.from(new Set([...models, ...defaultModels]));
-    if (!state.availableModels.includes(state.selectedModel)) {
-      state.selectedModel = data.modelEnv?.OPENAI_TEXT_MODEL_MID || defaultModels[0];
-    }
     state.openAIConfigured = Boolean(data.openAIConfigured);
     state.geminiConfigured = Boolean(data.providers?.gemini);
     state.preferredProvider = state.openAIConfigured ? "openai" : state.geminiConfigured ? "gemini" : "openai";
+    const recommendedModel = state.preferredProvider === "gemini"
+      ? data.modelEnv?.GEMINI_TEXT_MODEL_MID
+      : data.modelEnv?.OPENAI_TEXT_MODEL_MID;
+    if (
+      !state.availableModels.includes(state.selectedModel)
+      || providerForModel(state.selectedModel) !== state.preferredProvider
+    ) {
+      state.selectedModel = recommendedModel || defaultModels[0];
+    }
     state.llmStatus = state.openAIConfigured
       ? "OpenAI API key configured · GPT routing active"
       : state.geminiConfigured
@@ -1942,7 +1952,7 @@ async function sendChatMessage() {
   void recordUsedVocabulary(text);
   state.chatInput = "";
   state.chatLoading = true;
-  state.llmStatus = `Calling OpenAI · ${state.selectedModel}...`;
+  state.llmStatus = `Calling ${state.preferredProvider === "gemini" ? "Gemini" : "OpenAI"} · ${state.selectedModel}...`;
   state.llmStatusTone = "neutral";
   render();
 
@@ -1972,13 +1982,13 @@ async function sendChatMessage() {
         detail.errorMessage ||
           detail.detail ||
           detail.error ||
-          `OpenAI route returned ${response.status}`,
+          `Model route returned ${response.status}`,
       );
     }
 
     const data = await response.json();
     if (!data.success) {
-      throw new Error(data.errorMessage || "OpenAI request failed");
+      throw new Error(data.errorMessage || "Model request failed");
     }
     const reply = data.result || "The model router returned no text. Try another task or provider.";
     const coach = normalizeCoachResult(reply, text);
@@ -3042,7 +3052,7 @@ function render() {
   if (modelSelect) {
     modelSelect.addEventListener("change", (event) => {
       state.selectedModel = event.target.value;
-      state.preferredProvider = "openai";
+      state.preferredProvider = providerForModel(state.selectedModel);
       state.llmStatus = `Selected ${state.selectedModel}`;
       state.llmStatusTone = "neutral";
       render();
@@ -3073,7 +3083,7 @@ function render() {
 
   const providerSelect = document.querySelector("[data-provider-select]");
   if (providerSelect) {
-    providerSelect.value = "openai";
+    providerSelect.value = state.preferredProvider;
   }
 
   const refreshModelsButton = document.querySelector("[data-refresh-models]");
@@ -3160,7 +3170,7 @@ function render() {
       const model = state.customModel.trim();
       if (!model) return;
       state.selectedModel = model;
-      state.preferredProvider = "openai";
+      state.preferredProvider = providerForModel(model);
       state.availableModels = Array.from(new Set([model, ...state.availableModels]));
       state.llmStatus = `Selected custom model ${model}`;
       state.llmStatusTone = "neutral";
