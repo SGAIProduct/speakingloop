@@ -16,6 +16,10 @@ SpeakLoop 是面向中高级英语学习者的 AI 口语修复系统。它把真
 5. 打开 `Weekly`，点击 `Generate AI review`。
 6. 查看生成的次日练习计划。
 7. 在任意网页上双击一个单词，或悬停视频字幕，把它连同原句存进 `Assets`。
+
+### 3-Minute Demo Video
+
+[Watch or download the SpeakingLoop demo](demo/SpeakingLoop-3min-demo.mp4) · [English subtitles](demo/SpeakingLoop-3min-demo.en.srt)
 8. 查看本仓库的 Daytona 配置和可复现测试。
 
 ## 2. 产品价值

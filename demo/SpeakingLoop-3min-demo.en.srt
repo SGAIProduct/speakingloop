@@ -1,0 +1,140 @@
+1
+00:00:00,000 --> 00:00:03,560
+How many English words have you saved, but never used?
+
+2
+00:00:05,560 --> 00:00:11,881
+We look them up on the train. We write them in a
+notebook at night. We tap save in a word app. The list
+
+3
+00:00:11,881 --> 00:00:14,950
+becomes longer, but we almost never open it again.
+
+4
+00:00:16,950 --> 00:00:23,393
+The problem is not effort. A word is easier to
+remember when we can recall the first scene, voice,
+
+5
+00:00:23,393 --> 00:00:28,850
+and sentence around it. Without that context, it
+becomes only a spelling on a list.
+
+6
+00:00:30,850 --> 00:00:37,825
+Speaking has the same problem. A mistake happens in
+today's meeting. We notice it, feel awkward for a
+
+7
+00:00:37,825 --> 00:00:41,900
+second, and move on. Tomorrow, the same mistake comes
+back.
+
+8
+00:00:43,900 --> 00:00:49,983
+What if every word you meet, and every mistake you
+make, could become tomorrow's practice? This is
+
+9
+00:00:49,983 --> 00:00:50,790
+SpeakingLoop.
+
+10
+00:00:53,190 --> 00:00:57,380
+When you watch an English video, click a useful word
+in the subtitle.
+
+11
+00:00:57,880 --> 00:01:03,720
+SpeakingLoop saves the word, the full sentence, the
+source, and the moment where you found it.
+
+12
+00:01:05,220 --> 00:01:11,873
+The next day, it brings you back to that scene. It
+hides the key word and asks you to recall it. You do
+
+13
+00:01:11,873 --> 00:01:16,200
+not just see the answer. You remember it, say it, and
+use it again.
+
+14
+00:01:18,200 --> 00:01:21,060
+Then, start a one-to-one speaking session.
+
+15
+00:01:21,560 --> 00:01:24,600
+Yesterday I discuss the project with my manager.
+
+16
+00:01:25,100 --> 00:01:31,770
+Good try. Because it happened yesterday, say
+discussed. Please try the full sentence again.
+
+17
+00:01:32,270 --> 00:01:35,640
+Yesterday, I discussed the project with my manager.
+
+18
+00:01:36,140 --> 00:01:43,890
+Great. Now try a stronger expression. Yesterday, I had
+a useful discussion with my manager about the project.
+
+19
+00:01:44,390 --> 00:01:48,990
+Yesterday, I had a useful discussion with my manager
+about the project.
+
+20
+00:01:49,490 --> 00:01:53,030
+Well done. How did that discussion change your plan?
+
+21
+00:01:53,830 --> 00:01:59,200
+The loop continues: correct, repeat, improve, and move
+to a new topic.
+
+22
+00:01:59,700 --> 00:02:06,417
+At the end of the day, SpeakingLoop brings together
+your words, grammar mistakes, and weak expressions. It
+
+23
+00:02:06,417 --> 00:02:10,600
+creates a review for today and a clear practice plan
+for tomorrow.
+
+24
+00:02:12,600 --> 00:02:19,864
+Daytona gives our product a clean cloud sandbox. From
+our public GitHub code, we can install, run, and test
+
+25
+00:02:19,864 --> 00:02:22,580
+the full product in a fresh environment.
+
+26
+00:02:24,580 --> 00:02:31,554
+Nosana provides GPU power for the after-class AI
+review, turning each completed session into a personal
+
+27
+00:02:31,554 --> 00:02:37,850
+plan. Daytona helps us build and run the experience.
+Nosana helps us think after each lesson.
+
+28
+00:02:39,850 --> 00:02:46,478
+Do not let today's English disappear tomorrow. Turn
+every word, every mistake, and every correction into
+
+29
+00:02:46,478 --> 00:02:48,390
+your next better conversation.
+
+30
+00:02:50,690 --> 00:02:54,540
+SpeakingLoop. Learn from your life. Speak better
+tomorrow.
