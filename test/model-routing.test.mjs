@@ -1,37 +1,61 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("batch review tasks route to Qwen when enabled", async () => {
-  process.env.ENABLE_QWEN = "true";
-  process.env.DEFAULT_REVIEW_PROVIDER = "qwen";
-  process.env.DEFAULT_REPORT_PROVIDER = "qwen";
-  process.env.DEFAULT_VOCAB_PROVIDER = "qwen";
-  const { ModelRouter } = await import(`../lib/ai/model-router.mjs?test=${Date.now()}`);
+import { ModelRouter, MISSING_KEY_MESSAGE } from "../lib/ai/model-router.mjs";
+import { modelEnv } from "../lib/ai/model-routing-config.mjs";
+
+test("every task type routes to OpenAI", () => {
   const router = new ModelRouter();
+  const taskTypes = [
+    "realtime_speaking_coach",
+    "immediate_correction",
+    "follow_up_question",
+    "advanced_expression",
+    "post_session_report",
+    "tomorrow_review_planner",
+    "vocabulary_phrase_extractor",
+  ];
 
-  const review = router.selectRoute({ taskType: "tomorrow_review_planner" });
-  assert.equal(review.provider, "qwen");
-  assert.equal(review.model, "qwen3:8b");
-
-  const realtime = router.selectRoute({ taskType: "realtime_speaking_coach" });
-  assert.equal(realtime.provider, "openai");
+  for (const taskType of taskTypes) {
+    const route = router.selectRoute({ taskType });
+    assert.equal(route.provider, "openai", `${taskType} must stay on OpenAI`);
+    assert.ok(route.model.startsWith("gpt-"), `${taskType} resolved to ${route.model}`);
+  }
 });
 
-test("an unavailable Qwen preference falls back to a valid OpenAI model key", async () => {
-  const script = `
-    process.env.ENABLE_QWEN = "false";
-    const { ModelRouter } = await import("./lib/ai/model-router.mjs");
-    const route = new ModelRouter().selectRoute({
-      taskType: "tomorrow_review_planner",
-      preferredProvider: "qwen"
-    });
-    if (route.provider !== "openai") process.exit(2);
-    if (!route.model.startsWith("gpt-")) process.exit(3);
-  `;
-  const { spawnSync } = await import("node:child_process");
-  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
-    cwd: process.cwd(),
-    env: { ...process.env, ENABLE_QWEN: "false", DEFAULT_REVIEW_PROVIDER: "qwen" },
+test("batch tasks use the mini model, live coaching uses the strong model", () => {
+  const router = new ModelRouter();
+  assert.equal(
+    router.selectRoute({ taskType: "vocabulary_phrase_extractor" }).model,
+    modelEnv.OPENAI_TEXT_MODEL_MINI,
+  );
+  assert.equal(
+    router.selectRoute({ taskType: "realtime_speaking_coach" }).model,
+    modelEnv.OPENAI_REALTIME_MODEL,
+  );
+});
+
+test("an explicit preferred model wins over the task default", () => {
+  const route = new ModelRouter().selectRoute({
+    taskType: "post_session_report",
+    preferredModel: "gpt-5.5",
   });
-  assert.equal(result.status, 0, result.stderr?.toString());
+  assert.equal(route.model, "gpt-5.5");
+});
+
+test("a missing API key fails loudly instead of silently degrading", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const result = await new ModelRouter().run({
+      taskType: "immediate_correction",
+      input: { text: "hello" },
+      metadata: { userId: "test_user" },
+    });
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "missing_api_key");
+    assert.equal(result.errorMessage, MISSING_KEY_MESSAGE);
+  } finally {
+    if (previousKey !== undefined) process.env.OPENAI_API_KEY = previousKey;
+  }
 });

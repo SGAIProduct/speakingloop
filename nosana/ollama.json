@@ -4,7 +4,7 @@
   "ops": [
     {
       "type": "container/run",
-      "id": "speakinglook-review-model",
+      "id": "speakloop-review-model",
       "args": {
         "image": "docker.io/ollama/ollama:0.32.6",
         "entrypoint": ["/bin/sh"],

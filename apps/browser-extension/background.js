@@ -7,7 +7,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: MENU_ID,
-      title: "Add to SpeakingLook",
+      title: "Add to SpeakLoop",
       contexts: ["selection"],
     });
   });
@@ -55,7 +55,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   try {
     const details = await pageSelectionDetails(tab.id, selected);
-    const result = await SpeakingLookApi.capture({
+    const result = await SpeakLoopApi.capture({
       expression: details.expression || selected,
       contextSentence: details.contextSentence || "",
       sourceType: "webpage",
@@ -66,14 +66,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     });
     await showCaptureResult(tab.id, result);
     if (!result.duplicate) {
-      void SpeakingLookApi.enhance(result.cardId);
+      void SpeakLoopApi.enhance(result.cardId);
     }
   } catch (error) {
     try {
       await chrome.tabs.sendMessage(tab.id, {
         type: "speakloop:show-toast",
         expression: selected,
-        message: `SpeakingLook unavailable: ${error.message}`,
+        message: `SpeakLoop unavailable: ${error.message}`,
         canUndo: false,
       });
     } catch {
@@ -85,7 +85,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "speakloop:preload-dictionary") {
-    void SpeakingLookApi.preloadDictionary(message.expressions || [])
+    void SpeakLoopApi.preloadDictionary(message.expressions || [])
       .then((result) => sendResponse({ success: true, result }))
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true;
@@ -95,7 +95,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const requestId = String(message.requestId || "");
     const controller = new AbortController();
     if (requestId) contextRequestControllers.set(requestId, controller);
-    void SpeakingLookApi.lookup(
+    void SpeakLoopApi.lookup(
       {
         expression: message.expression,
         lemma: message.lemma,
@@ -131,17 +131,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "speakloop:capture-moment") {
     void (async () => {
       try {
-        const result = await SpeakingLookApi.capture({
+        const result = await SpeakLoopApi.capture({
           expression: message.expression,
           contextSentence: message.contextSentence || "",
-          sourceType: "browser_video",
+          // The card is reachable from video captions and from ordinary page
+          // text, so the surface decides the source rather than this handler.
+          sourceType: message.sourceType || "browser_video",
           sourceTitle: message.sourceTitle || sender.tab?.title || "",
           sourceUrl: message.sourceUrl || sender.tab?.url || "",
-          captureMethod: "caption_hover_card",
+          captureMethod: message.captureMethod || "caption_hover_card",
           userId: "local_user",
         });
         if (sender.tab?.id) await showCaptureResult(sender.tab.id, result);
-        if (!result.duplicate) void SpeakingLookApi.enhance(result.cardId);
+        if (!result.duplicate) void SpeakLoopApi.enhance(result.cardId);
         sendResponse({ success: true, result });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
@@ -151,7 +153,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "speakloop:view-card") {
-    void SpeakingLookApi.baseUrl().then((base) => {
+    void SpeakLoopApi.baseUrl().then((base) => {
       chrome.tabs.create({
         url: `${base}/?tab=assets&card=${encodeURIComponent(message.cardId)}`,
       });
@@ -161,7 +163,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "speakloop:undo") {
-    void SpeakingLookApi.deleteCard(message.cardId)
+    void SpeakLoopApi.deleteCard(message.cardId)
       .then(() => sendResponse({ success: true }))
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true;

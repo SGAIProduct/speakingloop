@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE = "http://127.0.0.1:4173";
 
-globalThis.SpeakingLookApi = {
+globalThis.SpeakLoopApi = {
   async baseUrl() {
     const stored = await chrome.storage.local.get("apiBaseUrl");
     return String(stored.apiBaseUrl || DEFAULT_API_BASE).replace(/\/$/, "");
@@ -17,7 +17,7 @@ globalThis.SpeakingLookApi = {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `SpeakingLook returned ${response.status}`);
+      throw new Error(data.error || `SpeakLoop returned ${response.status}`);
     }
     return data;
   },

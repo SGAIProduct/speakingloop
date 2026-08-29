@@ -1,6 +1,6 @@
-# SpeakingLook Global Capture Extension
+# SpeakLoop Global Capture Extension
 
-1. Start SpeakingLook at `http://127.0.0.1:4173`.
+1. Start SpeakLoop at `http://127.0.0.1:4173`.
 2. Open `chrome://extensions` or `edge://extensions`.
 3. Enable Developer mode.
 4. Choose **Load unpacked** and select this folder.
@@ -8,9 +8,9 @@
 6. Open a page with English video captions and hover any caption word to open the Context Card.
 7. Use **+ Save Moment** inside the card to save the word together with its complete caption sentence.
 
-Manual text selection is still supported: select English text, right-click, and choose **Add to SpeakingLook**.
+Manual text selection is still supported: select English text, right-click, and choose **Add to SpeakLoop**.
 
-The extension observes visible caption DOM only so it can make subtitle words hoverable. It does not read the clipboard, record audio, or send a word to SpeakingLook until the user hovers or saves it.
+The extension observes visible caption DOM only so it can make subtitle words hoverable. It does not read the clipboard, record audio, or send a word to SpeakLoop until the user hovers or saves it.
 
 ## Hover Card latency design
 

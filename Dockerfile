@@ -7,7 +7,7 @@ COPY --chown=node:node . .
 ENV HOST=0.0.0.0 \
     PORT=4173 \
     NODE_ENV=production \
-    VOCABULARY_STORE_PATH=/tmp/speakinglook/vocabulary-store.json
+    VOCABULARY_STORE_PATH=/tmp/speakloop/vocabulary-store.json
 
 USER node
 

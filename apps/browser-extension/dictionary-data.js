@@ -99,5 +99,5 @@
     return result;
   }
 
-  globalThis.SpeakingLookDictionary = Object.freeze({ lemma, lookup, lookupBatch });
+  globalThis.SpeakLoopDictionary = Object.freeze({ lemma, lookup, lookupBatch });
 })();

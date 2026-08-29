@@ -1,4 +1,4 @@
-# SpeakingLook Hackathon Deployment Runbook
+# SpeakLoop Hackathon Deployment Runbook
 
 这份文档用于比赛当天部署、预热、验收和关停。命令中的 Key、URL 和 Market ID 都必须替换为实际值。
 
@@ -13,7 +13,9 @@ git status --short
 
 验收标准：测试全部通过；仓库中没有 `.env`、API Key、重复项目、生成数据或个人文件。
 
-## 2. 部署 Nosana 推理端点
+## 2. 部署 Nosana 推理端点（历史，当前构建未接入）
+
+> 当前代码只调用 OpenAI，已移除 Qwen/Ollama 路由。本节保留作为历史记录，可跳过。
 
 为了避免评委等待 GPU 冷启动，先部署 Nosana，再部署应用。
 
@@ -51,7 +53,7 @@ daytona login --api-key="$DAYTONA_API_KEY"
 
 ```bash
 daytona create \
-  --name speakinglook-demo \
+  --name speakloop-demo \
   --target us \
   --dockerfile Dockerfile \
   --context . \
@@ -87,8 +89,8 @@ QWEN_TEXT_MODEL_CHEAP=qwen3:8b
 如果 Dockerfile 没有自动启动进程：
 
 ```bash
-daytona exec speakinglook-demo --cwd /app -- \
-  nohup node server.mjs '>' /tmp/speakinglook.log '2>&1' '<' /dev/null '&'
+daytona exec speakloop-demo --cwd /app -- \
+  nohup node server.mjs '>' /tmp/speakloop.log '2>&1' '<' /dev/null '&'
 ```
 
 精简 Node 镜像默认不包含 `curl`，因此通过公开预览地址检查：
@@ -100,7 +102,7 @@ curl https://<preview-url>/api/health
 创建六小时评委链接：
 
 ```bash
-daytona preview-url speakinglook-demo --port 4173 --expires 21600
+daytona preview-url speakloop-demo --port 4173 --expires 21600
 ```
 
 ## 5. 比赛当天验收
@@ -123,7 +125,7 @@ daytona preview-url speakinglook-demo --port 4173 --expires 21600
 
 1. Daytona 沙箱详情和健康状态。
 2. Nosana Job/节点页和运行中的 Ollama 服务。
-3. SpeakingLook Weekly 页面中的 Qwen Review 结果。
+3. SpeakLoop Weekly 页面中的 Qwen Review 结果。
 
 README 中补充：公开 GitHub 地址、Daytona 预览地址、Nosana Job/Explorer 地址和 60 秒演示 GIF。
 
@@ -132,8 +134,8 @@ README 中补充：公开 GitHub 地址、Daytona 预览地址、Nosana Job/Expl
 答辩结束后立即停止资源：
 
 ```bash
-daytona stop speakinglook-demo
-daytona archive speakinglook-demo
+daytona stop speakloop-demo
+daytona archive speakloop-demo
 ```
 
 同时在 Nosana Dashboard 停止 GPU Job，确认不再继续消耗额度。

@@ -1,3 +1,3 @@
 export function PopupDescription() {
-  return "SpeakingLook Global Capture";
+  return "SpeakLoop Global Capture";
 }

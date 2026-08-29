@@ -26,6 +26,7 @@ const tasks = [
 
 const errors = [
   {
+    id: "seed_sentence_collapse",
     type: "Sentence Collapse",
     level: "High priority",
     original:
@@ -40,6 +41,7 @@ const errors = [
     status: "Recurring Error",
   },
   {
+    id: "seed_logic_bridge",
     type: "Logic Bridge",
     level: "Medium priority",
     original:
@@ -138,7 +140,7 @@ const correctionModes = [
 ];
 
 function coachSystemPrompt(mode = "strict") {
-  return `You are SpeakingLook Coach, an English speaking coach for intermediate Chinese-speaking learners.
+  return `You are SpeakLoop Coach, an English speaking coach for intermediate Chinese-speaking learners.
 Your job is not to make sentences fancy. Make them correct, natural, short, and speakable.
 The current correction mode is ${mode}.
 
@@ -162,7 +164,7 @@ Rules:
 - Keep the correction and explanation to one or two short sentences.
 - The learner should speak more than the coach.
 - First understand the learner's meaning. Never continue with an unrelated stock question.
-- If the learner asks who you are or how to address you, answer: "You can call me SpeakingLook Coach. I'm your AI speaking coach."
+- If the learner asks who you are or how to address you, answer: "You can call me SpeakLoop Coach. I'm your AI speaking coach."
 - Preserve positive and negative meaning carefully, especially can/can't and do/don't.
 - correctedSentence is natural spoken grammar. simpleSpokenVersion is easier and shorter.
 - advancedExpression is optional. Use it only for business, interviews, debates, presentations, or AI/PM professional discussion.
@@ -206,6 +208,9 @@ const initialTab = tabs.some((tab) => tab.id === initialParams.get("tab"))
   ? initialParams.get("tab")
   : "dashboard";
 
+const ERROR_STATUS_CYCLE = ["Recurring Error", "Practicing", "Improved"];
+const ERROR_STATUS_STORAGE_KEY = "speakloop.errorStatus.v1";
+
 const state = {
   activeTab: initialTab,
   recording: false,
@@ -236,6 +241,8 @@ const state = {
   vocabularyCards: [],
   vocabularyLoading: true,
   assetFilter: "All",
+  translatingCardIds: [],
+  translationErrors: {},
   captureOpen: initialParams.get("capture") === "1",
   captureDraft: {
     expression: "",
@@ -256,6 +263,8 @@ const state = {
   practicePhase: "answer",
   pendingCorrection: null,
   sessionErrors: [],
+  errorStatuses: loadErrorStatuses(),
+  errorFilter: "All",
   aiReview: null,
   aiReviewLoading: false,
   aiReviewError: "",
@@ -288,7 +297,7 @@ function fallbackVocabularyCards() {
     exampleSentence: "",
     spokenExample: expression,
     sourceType: "manual",
-    sourceTitle: "SpeakingLook starter library",
+    sourceTitle: "SpeakLoop starter library",
     tags: [type],
     masteryLevel: mastery.toLowerCase(),
     reviewCount: 0,
@@ -306,11 +315,38 @@ function activeVocabularyTargets() {
   return [...selected, ...defaults.filter((card) => !state.practiceTargets.includes(card.id))].slice(0, 5);
 }
 
+const CAPTURED_SOURCE_TYPES = new Set(["webpage", "browser_video"]);
+
+function isCapturedCard(card) {
+  return CAPTURED_SOURCE_TYPES.has(card.sourceType);
+}
+
+function capturedCards() {
+  return state.vocabularyCards.filter(isCapturedCard);
+}
+
+function captureSourceLabel(card) {
+  if (card.sourceType === "browser_video") return "Video caption";
+  if (card.sourceType === "webpage") return "Web page";
+  return String(card.sourceType || "manual").replaceAll("_", " ");
+}
+
 function vocabularyTags() {
+  const captured = capturedCards().length;
   return [
     "All",
+    ...(captured ? [`Captured (${captured})`] : []),
     ...new Set(state.vocabularyCards.flatMap((card) => card.tags || []).filter(Boolean)),
   ];
+}
+
+function filteredVocabularyCards() {
+  const cards = state.vocabularyCards;
+  if (state.assetFilter === "All") return cards;
+  if (state.assetFilter.startsWith("Captured")) {
+    return capturedCards();
+  }
+  return cards.filter((card) => (card.tags || []).includes(state.assetFilter));
 }
 
 function sourceLabel(card) {
@@ -511,7 +547,7 @@ function demoCoachResult(userText) {
 
   return {
     answerToUser: asksIdentity
-      ? "You can call me SpeakingLook Coach. I'm your AI speaking coach."
+      ? "You can call me SpeakLoop Coach. I'm your AI speaking coach."
       : "",
     correctedSentence,
     simpleSpokenVersion: correctedSentence,
@@ -533,6 +569,61 @@ function statusClass(status) {
   return status.toLowerCase().replaceAll(" ", "-");
 }
 
+// --- Error status tracking -------------------------------------------------
+// Clicking the status chip on an error card walks it through the repair
+// lifecycle. The choice is the learner's own record of progress, so it is kept
+// in localStorage and survives a reload.
+
+function loadErrorStatuses() {
+  try {
+    const raw = window.localStorage.getItem(ERROR_STATUS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveErrorStatuses(statuses) {
+  try {
+    window.localStorage.setItem(ERROR_STATUS_STORAGE_KEY, JSON.stringify(statuses));
+  } catch {
+    // Private browsing or blocked storage: the status still works for this session.
+  }
+}
+
+function errorStatusFor(error) {
+  return state.errorStatuses[error.id] || error.status || ERROR_STATUS_CYCLE[0];
+}
+
+function cycleErrorStatus(errorId) {
+  const all = [...state.sessionErrors, ...errors];
+  const error = all.find((item) => item.id === errorId);
+  if (!error) return;
+  const current = errorStatusFor(error);
+  const index = ERROR_STATUS_CYCLE.indexOf(current);
+  const next = ERROR_STATUS_CYCLE[(index + 1) % ERROR_STATUS_CYCLE.length];
+  state.errorStatuses = { ...state.errorStatuses, [errorId]: next };
+  saveErrorStatuses(state.errorStatuses);
+  render();
+}
+
+function practiceErrorRepair(errorId) {
+  const all = [...state.sessionErrors, ...errors];
+  const error = all.find((item) => item.id === errorId);
+  if (!error) return;
+  openPracticeTask({
+    taskType: "immediate_correction",
+    prompt: [
+      `You previously said: "${error.original}"`,
+      "",
+      `The repaired version is: "${error.standard}"`,
+      "",
+      `Say the same idea again using the pattern "${error.pattern}". Use your own example, not this one.`,
+    ].join("\n"),
+  });
+}
+
 function progressRing(value, label) {
   return `
     <div class="ring" style="--value:${value}">
@@ -545,10 +636,10 @@ function progressRing(value, label) {
 function shell(content) {
   return `
     <header class="app-header">
-      <a class="brand" href="#" data-tab="dashboard" aria-label="SpeakingLook home">
+      <a class="brand" href="#" data-tab="dashboard" aria-label="SpeakLoop home">
         <span class="brand-mark">SL</span>
         <span>
-          <strong>SpeakingLook</strong>
+          <strong>SpeakLoop</strong>
           <small>Personal speaking repair system</small>
         </span>
       </a>
@@ -591,7 +682,7 @@ function dashboard() {
         <p class="eyebrow">Fix yesterday's mistakes. Speak better today.</p>
         <h1>Today’s Speaking Repair Mission</h1>
         <p class="hero-lead">
-          SpeakingLook turns every conversation into a repair loop: capture what broke, rebuild the sentence,
+          SpeakLoop turns every conversation into a repair loop: capture what broke, rebuild the sentence,
           review it tomorrow, then force the expression back into real speaking.
         </p>
         <div class="hero-actions">
@@ -645,6 +736,12 @@ function dashboard() {
         </div>
       </article>
 
+      <article class="metric-card capture-inbox-card">
+        <span class="metric-label">Captured from browser</span>
+        <strong>${capturedCards().length}</strong>
+        <p>Words and sentences you saved while reading or watching.</p>
+        <button type="button" class="link-button" data-open-captured>Open capture inbox</button>
+      </article>
       <article class="metric-card">
         <span class="metric-label">Streak</span>
         <strong>12 days</strong>
@@ -669,7 +766,7 @@ function loopMap() {
     <section class="page-section">
       <div class="section-heading center">
         <p class="eyebrow">Graphical product representation</p>
-        <h1>SpeakingLook System Map</h1>
+        <h1>SpeakLoop System Map</h1>
         <p>The product is built around one calm, repeated learning loop.</p>
       </div>
       <div class="loop-map">
@@ -725,7 +822,7 @@ function renderChatMessage(message, index) {
       <article class="bubble coach correction-card">
         <div class="correction-heading">
           <div>
-            <span>SpeakingLook Coach · ${escapeHtml(coach.errorType)}</span>
+            <span>SpeakLoop Coach · ${escapeHtml(coach.errorType)}</span>
             <strong>Stop. Say it this way.</strong>
           </div>
           <span class="repeat-status ${escapeHtml(message.repeatStatus || "not_repeated")}">
@@ -1095,7 +1192,7 @@ function practice() {
             </div>
             <button type="button" data-refresh-models>Check OpenAI connection</button>
             <small class="${state.llmStatusTone}">${escapeHtml(state.llmStatus)}</small>
-            <small>Qwen and Gemini are disabled for the current product stage.</small>
+            <small>SpeakLoop runs on OpenAI only. There is no silent model fallback.</small>
           </div>
         </div>
         <div class="practice-phase ${state.practicePhase}">
@@ -1200,7 +1297,7 @@ function practice() {
         </article>
         <article class="note warning">
           <span>Fallback</span>
-          <p>Qwen and Gemini fallback are disabled. If OpenAI is unavailable, SpeakingLook shows the provider error instead of silently changing models.</p>
+          <p>There is no second provider. If OpenAI is unreachable or the key is missing, SpeakLoop shows the real error instead of quietly answering with a weaker model.</p>
         </article>
         <article class="note">
           <span>Setup</span>
@@ -1602,7 +1699,7 @@ async function refreshOpenAIStatus() {
     state.selectedModel = defaultModels[0];
     state.preferredProvider = "openai";
     state.openAIConfigured = false;
-    state.llmStatus = "OpenAI router unavailable · start the SpeakingLook server";
+    state.llmStatus = "OpenAI router unavailable · start the SpeakLoop server";
     state.llmStatusTone = "warning";
   }
 
@@ -1881,7 +1978,7 @@ async function sendChatMessage() {
   } catch (error) {
     const isMissingOpenAIKey = String(error.message || "").includes("OPENAI_API_KEY");
     const providerMessage = isMissingOpenAIKey
-      ? "GPT is not connected yet. Add your OpenAI API key to the local .env file, restart SpeakingLook, then try again."
+      ? "GPT is not connected yet. Add your OpenAI API key to the local .env file, restart SpeakLoop, then try again."
       : `The GPT request could not run: ${error.message}`;
     state.chatMessages = [
       ...state.chatMessages,
@@ -1926,6 +2023,55 @@ async function loadVocabularyCards() {
       block: "center",
     });
   }
+  void translatePendingCards();
+}
+
+// --- Live translation of saved cards --------------------------------------
+// A card is saved the moment it is captured, before GPT has seen it. These
+// helpers fill in the Chinese meaning, pronunciation and usage as soon as the
+// card reaches the app, and expose a retry when the call fails.
+
+function needsTranslation(card) {
+  if (!card || card.id.startsWith("demo_")) return false;
+  return card.enhanced !== true;
+}
+
+async function translateVocabularyCard(cardId, { rerender = true } = {}) {
+  if (!isHttpPreview || state.translatingCardIds.includes(cardId)) return;
+  state.translatingCardIds = [...state.translatingCardIds, cardId];
+  state.translationErrors = { ...state.translationErrors, [cardId]: "" };
+  if (rerender) render();
+
+  try {
+    const response = await fetch("/api/vocabulary/enhance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cardId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || `Translation failed (${response.status})`);
+    }
+    state.vocabularyCards = state.vocabularyCards.map((card) =>
+      card.id === cardId ? { ...card, ...data.card } : card,
+    );
+  } catch (error) {
+    state.translationErrors = { ...state.translationErrors, [cardId]: error.message };
+  } finally {
+    state.translatingCardIds = state.translatingCardIds.filter((id) => id !== cardId);
+    if (rerender) render();
+  }
+}
+
+async function translatePendingCards() {
+  const pending = state.vocabularyCards.filter(
+    (card) => needsTranslation(card) && !state.translationErrors[card.id],
+  );
+  // Sequential so a freshly captured batch does not fire a burst of requests.
+  for (const card of pending.slice(0, 8)) {
+    await translateVocabularyCard(card.id, { rerender: false });
+  }
+  if (pending.length) render();
 }
 
 async function enhanceVocabularyCard(cardId) {
@@ -1990,7 +2136,7 @@ async function captureVocabulary(payload) {
   } catch (error) {
     state.captureSaving = false;
     state.captureToast = {
-      message: "Could not add to SpeakingLook",
+      message: "Could not add to SpeakLoop",
       expression: error.message,
       cardId: "",
     };
@@ -2218,7 +2364,7 @@ function review() {
               <div>
                 <span>Conversation reuse mission</span>
                 <h2>Use these expressions in one natural answer.</h2>
-                <p>Speak for 30–60 seconds. SpeakingLook will detect successful reuse and update mastery.</p>
+                <p>Speak for 30–60 seconds. SpeakLoop will detect successful reuse and update mastery.</p>
               </div>
               <div class="reuse-preview-expressions">
                 ${
@@ -2271,14 +2417,36 @@ function review() {
 
 function errorLibrary() {
   const allErrors = [...state.sessionErrors, ...errors];
+  const counts = ERROR_STATUS_CYCLE.reduce((totals, status) => {
+    totals[status] = allErrors.filter((error) => errorStatusFor(error) === status).length;
+    return totals;
+  }, {});
+  const filters = ["All", ...ERROR_STATUS_CYCLE];
+  const visibleErrors =
+    state.errorFilter === "All"
+      ? allErrors
+      : allErrors.filter((error) => errorStatusFor(error) === state.errorFilter);
+
   return `
     <section class="page-section">
       <div class="section-heading">
         <p class="eyebrow">Personal error library</p>
         <h1>High-frequency speaking repairs</h1>
+        <p>Tap a status chip to move a repair forward: Recurring Error → Practicing → Improved.</p>
+      </div>
+      <div class="asset-toolbar">
+        ${filters
+          .map(
+            (filter) => `
+              <button type="button" class="${state.errorFilter === filter ? "active" : ""}" data-error-filter="${escapeHtml(filter)}">
+                ${escapeHtml(filter)}${filter === "All" ? ` (${allErrors.length})` : ` (${counts[filter] || 0})`}
+              </button>
+            `,
+          )
+          .join("")}
       </div>
       <div class="error-grid">
-        ${allErrors
+        ${visibleErrors
           .map(
             (error) => `
               <article class="error-card">
@@ -2306,29 +2474,75 @@ function errorLibrary() {
                   <span>Reusable Pattern</span>
                   <p>${escapeHtml(error.pattern)}</p>
                 </section>
-                <button type="button">${escapeHtml(error.status)}</button>
+                <div class="error-card-actions">
+                  <button
+                    type="button"
+                    class="error-status ${statusClass(errorStatusFor(error))}"
+                    data-cycle-error-status="${escapeHtml(error.id)}"
+                    aria-label="Change status for this repair. Currently ${escapeHtml(errorStatusFor(error))}."
+                  >${escapeHtml(errorStatusFor(error))}</button>
+                  <button type="button" data-practice-error="${escapeHtml(error.id)}">Practice this repair</button>
+                </div>
               </article>
             `,
           )
           .join("")}
       </div>
+      ${
+        visibleErrors.length
+          ? ""
+          : `<p class="empty-state">No repairs marked "${escapeHtml(state.errorFilter)}" yet.</p>`
+      }
     </section>
   `;
 }
 
+function translationBlock(card) {
+  if (state.translatingCardIds.includes(card.id)) {
+    return `<p class="meaning-zh translating">翻译中… · GPT is writing this card</p>`;
+  }
+
+  const failure = state.translationErrors[card.id];
+  if (failure) {
+    return `
+      <div class="translation-failed">
+        <p>翻译失败：${escapeHtml(failure)}</p>
+        <button type="button" data-translate-card="${escapeHtml(card.id)}">Translate again</button>
+      </div>
+    `;
+  }
+
+  if (needsTranslation(card)) {
+    return `
+      <div class="translation-failed">
+        <p>还没有释义。</p>
+        <button type="button" data-translate-card="${escapeHtml(card.id)}">Translate now</button>
+      </div>
+    `;
+  }
+
+  return `
+    ${card.meaningZh ? `<p class="meaning-zh">${escapeHtml(card.meaningZh)}</p>` : ""}
+    ${card.meaningEn ? `<p>${escapeHtml(card.meaningEn)}</p>` : ""}
+  `;
+}
+
 function assets() {
-  const cards = state.vocabularyCards;
-  const filteredCards =
-    state.assetFilter === "All"
-      ? cards
-      : cards.filter((card) => (card.tags || []).includes(state.assetFilter));
+  const filteredCards = filteredVocabularyCards();
+  const capturedCount = capturedCards().length;
   return `
     <section class="page-section">
       <div class="asset-heading-row">
         <div class="section-heading">
           <p class="eyebrow">Global vocabulary capture</p>
           <h1>Every new word becomes a speaking asset.</h1>
-          <p>Capture from webpages with right-click, use Cmd/Ctrl + Shift + S as a desktop fallback, or add an expression here.</p>
+          <p>Double-click a word on any web page, hover a video caption, or right-click a selection. Everything you save from the browser lands here with its original sentence.</p>
+          ${
+            capturedCount
+              ? `<p class="capture-inbox-note">${capturedCount} expression${capturedCount === 1 ? "" : "s"} captured from the browser.
+                   <button type="button" class="link-button" data-asset-filter="Captured (${capturedCount})">Show only captured</button></p>`
+              : `<p class="capture-inbox-note">Nothing captured from the browser yet. Install the extension in <code>apps/browser-extension</code>, then double-click a word on any page.</p>`
+          }
         </div>
         <button type="button" class="primary-action" data-add-vocabulary>Add Word / Phrase</button>
       </div>
@@ -2339,7 +2553,7 @@ function assets() {
               <div class="capture-panel-heading">
                 <div>
                   <span>Manual capture</span>
-                  <strong>Add to SpeakingLook</strong>
+                  <strong>Add to SpeakLoop</strong>
                 </div>
                 <button type="button" aria-label="Close capture form" data-close-capture>×</button>
               </div>
@@ -2379,7 +2593,7 @@ function assets() {
               <div class="capture-actions">
                 <span>Shortcut: Cmd/Ctrl + Shift + S</span>
                 <button type="submit" class="primary-action" ${state.captureSaving ? "disabled" : ""}>
-                  ${state.captureSaving ? "Adding..." : "Add to SpeakingLook"}
+                  ${state.captureSaving ? "Adding..." : "Add to SpeakLoop"}
                 </button>
               </div>
             </form>
@@ -2407,8 +2621,20 @@ function assets() {
                   <small>${escapeHtml(card.masteryLevel || "new")}</small>
                 </div>
                 <h2>${escapeHtml(card.expression)}</h2>
-                ${card.meaningZh ? `<p class="meaning-zh">${escapeHtml(card.meaningZh)}</p>` : ""}
-                <p>${escapeHtml(card.meaningEn || "Waiting for local AI enhancement...")}</p>
+                ${
+                  card.pronunciation || card.partOfSpeech
+                    ? `<p class="asset-pronunciation">${escapeHtml([card.pronunciation, card.partOfSpeech].filter(Boolean).join(" · "))}</p>`
+                    : ""
+                }
+                ${translationBlock(card)}
+                ${
+                  card.contextSentence
+                    ? `<section class="asset-context">
+                         <small>Original sentence</small>
+                         <p>${escapeHtml(card.contextSentence)}</p>
+                       </section>`
+                    : ""
+                }
                 ${
                   card.spokenExample
                     ? `<blockquote>${escapeHtml(card.spokenExample)}</blockquote>`
@@ -2418,7 +2644,7 @@ function assets() {
                   ${(card.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
                 </div>
                 <p class="asset-source">
-                  Source:
+                  ${isCapturedCard(card) ? `<span class="source-chip">${escapeHtml(captureSourceLabel(card))}</span>` : "Source:"}
                   ${
                     safeHttpUrl(card.sourceUrl)
                       ? `<a href="${escapeHtml(safeHttpUrl(card.sourceUrl))}" target="_blank" rel="noreferrer">${escapeHtml(sourceLabel(card))}</a>`
@@ -2477,12 +2703,12 @@ function weeklyReport() {
       </article>
       <article class="wide-card ai-review-card">
         <div>
-          <p class="eyebrow">Decentralized GPU review</p>
+          <p class="eyebrow">Next-day plan</p>
           <h2>Generate tomorrow's speaking plan</h2>
-          <p>SpeakingLook sends the completed session to a Qwen model running on Nosana. Real-time coaching stays on the low-latency route.</p>
+          <p>SpeakLoop sends the completed session to the mini GPT route and turns it into tomorrow's repair tasks. Live coaching stays on the faster route.</p>
         </div>
         <button type="button" class="primary-action" data-generate-ai-review ${state.aiReviewLoading ? "disabled" : ""}>
-          ${state.aiReviewLoading ? "Generating on GPU..." : "Generate AI review"}
+          ${state.aiReviewLoading ? "Generating..." : "Generate AI review"}
         </button>
         ${
           state.aiReviewError
@@ -2622,6 +2848,25 @@ function render() {
     });
   });
 
+  document.querySelectorAll("[data-cycle-error-status]").forEach((button) => {
+    button.addEventListener("click", () => {
+      cycleErrorStatus(button.dataset.cycleErrorStatus);
+    });
+  });
+
+  document.querySelectorAll("[data-practice-error]").forEach((button) => {
+    button.addEventListener("click", () => {
+      practiceErrorRepair(button.dataset.practiceError);
+    });
+  });
+
+  document.querySelectorAll("[data-error-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.errorFilter = button.dataset.errorFilter;
+      render();
+    });
+  });
+
   const startReuseMissionButton = document.querySelector("[data-start-reuse-mission]");
   if (startReuseMissionButton) {
     startReuseMissionButton.addEventListener("click", startReuseMission);
@@ -2688,6 +2933,23 @@ function render() {
     button.addEventListener("click", () => {
       state.assetFilter = button.dataset.assetFilter;
       render();
+    });
+  });
+
+  const openCapturedButton = document.querySelector("[data-open-captured]");
+  if (openCapturedButton) {
+    openCapturedButton.addEventListener("click", () => {
+      const captured = capturedCards().length;
+      state.activeTab = "assets";
+      state.assetFilter = captured ? `Captured (${captured})` : "All";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  document.querySelectorAll("[data-translate-card]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void translateVocabularyCard(button.dataset.translateCard);
     });
   });
 

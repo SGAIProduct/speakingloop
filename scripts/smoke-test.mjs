@@ -6,38 +6,42 @@ import { join } from "node:path";
 
 const host = "127.0.0.1";
 const port = String(4300 + Math.floor(Math.random() * 500));
-const temporaryDirectory = await mkdtemp(join(tmpdir(), "speakinglook-smoke-"));
-const fakeOllama = createServer(async (request, response) => {
-  if (request.url !== "/api/chat" || request.method !== "POST") {
+const temporaryDirectory = await mkdtemp(join(tmpdir(), "speakloop-smoke-"));
+
+// Stands in for the OpenAI Responses API so the smoke test exercises the real
+// request path without spending tokens.
+const fakeOpenAI = createServer(async (request, response) => {
+  if (!request.url.endsWith("/responses") || request.method !== "POST") {
     response.writeHead(404).end();
     return;
   }
   for await (const _chunk of request) {
-    // Drain the request body to emulate the remote Ollama service.
+    // Drain the request body.
   }
   response.writeHead(200, { "Content-Type": "application/json" });
-  response.end(JSON.stringify({
-    message: {
-      content: JSON.stringify({
+  response.end(
+    JSON.stringify({
+      output_text: JSON.stringify({
         summary: "Your product explanation became clearer after the correction.",
         topIssue: "Subject-verb agreement in longer answers.",
         nextActions: [
           "Repeat the corrected sentence three times.",
           "Answer once using two short clauses.",
-          "Reuse decision latency in a new example."
+          "Reuse decision latency in a new example.",
         ],
-        practicePrompt: "Explain one AI deployment risk in two short sentences."
+        practicePrompt: "Explain one AI deployment risk in two short sentences.",
       }),
-    },
-    prompt_eval_count: 120,
-    eval_count: 80,
-  }));
+      usage: { input_tokens: 120, output_tokens: 80 },
+    }),
+  );
 });
+
 await new Promise((resolve, reject) => {
-  fakeOllama.once("error", reject);
-  fakeOllama.listen(0, host, resolve);
+  fakeOpenAI.once("error", reject);
+  fakeOpenAI.listen(0, host, resolve);
 });
-const ollamaPort = fakeOllama.address().port;
+const openAIPort = fakeOpenAI.address().port;
+
 const child = spawn(process.execPath, ["server.mjs"], {
   cwd: process.cwd(),
   env: {
@@ -45,9 +49,8 @@ const child = spawn(process.execPath, ["server.mjs"], {
     HOST: host,
     PORT: port,
     VOCABULARY_STORE_PATH: join(temporaryDirectory, "vocabulary-store.json"),
-    ENABLE_QWEN: "true",
-    DEFAULT_REVIEW_PROVIDER: "qwen",
-    OLLAMA_BASE_URL: `http://${host}:${ollamaPort}`,
+    OPENAI_API_KEY: "smoke-test-key",
+    OPENAI_BASE_URL: `http://${host}:${openAIPort}/v1`,
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -74,9 +77,10 @@ async function waitForServer() {
 try {
   const health = await waitForServer();
   if (health.status !== "ok") throw new Error("Health endpoint returned a non-ok status");
+  if (health.provider !== "openai") throw new Error("Health endpoint no longer reports OpenAI");
 
   const home = await fetch(baseUrl);
-  if (!home.ok || !(await home.text()).includes("SpeakingLook")) {
+  if (!home.ok || !(await home.text()).includes("SpeakLoop")) {
     throw new Error("Product home page did not load");
   }
 
@@ -89,12 +93,21 @@ try {
     body: JSON.stringify({
       expression: "decision latency",
       contextSentence: "We should reduce decision latency across the product team.",
-      sourceType: "smoke_test",
+      sourceType: "webpage",
+      sourceTitle: "Smoke test article",
+      sourceUrl: "https://example.com/article",
+      captureMethod: "page_selection_card",
       userId: "smoke_test",
     }),
   });
   const captureResult = await capture.json();
   if (!capture.ok || !captureResult.success) throw new Error("Vocabulary capture flow failed");
+  if (captureResult.card.sourceType !== "webpage") {
+    throw new Error("Webpage capture did not preserve its source type");
+  }
+  if (!captureResult.card.contextSentence) {
+    throw new Error("Webpage capture did not preserve its context sentence");
+  }
 
   const vocabulary = await fetch(`${baseUrl}/api/vocabulary?userId=smoke_test`);
   const vocabularyResult = await vocabulary.json();
@@ -111,16 +124,16 @@ try {
     }),
   });
   const reviewResult = await review.json();
-  if (!review.ok || reviewResult.provider !== "qwen" || reviewResult.review.nextActions.length !== 3) {
-    throw new Error(`Nosana/Ollama review contract failed: ${JSON.stringify(reviewResult)}`);
+  if (!review.ok || reviewResult.provider !== "openai" || reviewResult.review.nextActions.length !== 3) {
+    throw new Error(`OpenAI review contract failed: ${JSON.stringify(reviewResult)}`);
   }
 
   console.log(JSON.stringify({
     success: true,
-    checks: ["health", "home", "protected-files", "capture", "vocabulary", "qwen-review"],
+    checks: ["health", "home", "protected-files", "webpage-capture", "vocabulary", "openai-review"],
     health,
   }, null, 2));
 } finally {
   child.kill("SIGTERM");
-  fakeOllama.close();
+  fakeOpenAI.close();
 }

@@ -38,7 +38,7 @@ function showToast(message) {
   ].join(";");
 
   const title = document.createElement("strong");
-  title.textContent = message.message || "Added to SpeakingLook";
+  title.textContent = message.message || "Added to SpeakLoop";
   const expression = document.createElement("span");
   expression.textContent = message.expression || "";
   expression.style.cssText = "color:#6e6e73;font-size:13px";
@@ -109,7 +109,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     "[class*='subtitle' i]",
     "[data-purpose*='caption' i]",
   ].join(",");
-  const dictionary = globalThis.SpeakingLookDictionary || {
+  const dictionary = globalThis.SpeakLoopDictionary || {
     lemma: (value) => String(value || "").toLowerCase().replace(/[^a-z]+/g, ""),
     lookup: () => null,
     lookupBatch: () => ({}),
@@ -120,7 +120,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const contextLookupCache = new Map();
   const dictionaryPreloadQueue = new Set();
   const savedExpressions = new Set();
-  let activeToken = null;
+  let activeMoment = null;
   let hoverCard = null;
   let hideTimer = null;
   let scanFrame = null;
@@ -152,7 +152,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     hoverCard.dataset.speakloopCaptionCard = "true";
     hoverCard.hidden = true;
     hoverCard.setAttribute("role", "dialog");
-    hoverCard.setAttribute("aria-label", "SpeakingLook context card");
+    hoverCard.setAttribute("aria-label", "SpeakLoop context card");
     hoverCard.innerHTML = `
       <div class="slcc-heading">
         <div>
@@ -201,7 +201,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     cancelHide();
     cancelContextEnrichment();
     if (hoverCard) hoverCard.hidden = true;
-    activeToken = null;
+    activeMoment = null;
   }
 
   function scheduleHide() {
@@ -253,9 +253,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     };
   }
 
-  function positionCard(token) {
+  function positionCard(anchorRect) {
     const card = ensureHoverCard();
-    const anchor = token.getBoundingClientRect();
+    const anchor = anchorRect;
     const margin = 12;
     const viewport = viewportBounds();
     const availableWidth = Math.max(120, viewport.width - margin * 2);
@@ -292,7 +292,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     card.querySelector("[data-slcc-language]").textContent =
       [pronunciation, partOfSpeech].filter(Boolean).join(" · ");
     card.querySelector("[data-slcc-meaning]").textContent =
-      data.meaningZh || "本地词典暂未收录；可结合原句理解";
+      data.meaningZh || "翻译中…";
     card.querySelector("[data-slcc-context]").textContent = data.contextSentence || "";
     const enrichment = card.querySelector("[data-slcc-enrichment]");
     const contextMeaning = String(data.contextMeaningZh || "").trim();
@@ -312,41 +312,62 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     save.textContent = saved ? "Saved to Moment Review" : "+ Save Moment";
   }
 
-  function showCard(token) {
+  // A "moment" is one thing the learner pointed at: a caption word, a word they
+  // double-clicked on a page, or a phrase they selected. Every source produces
+  // the same shape, so the hover card and the save path do not care where it
+  // came from.
+  function captionMoment(token) {
+    const expression = token.dataset.speakloopExpression || token.textContent.trim();
+    const cue = token.closest("[data-speakloop-caption-processed]");
+    return {
+      expression,
+      contextSentence: cue?.dataset.speakloopCaptionSource || expression,
+      sourceType: "browser_video",
+      captureMethod: "caption_hover_card",
+      anchor: () => token.getBoundingClientRect(),
+      owner: token,
+    };
+  }
+
+  function sameMoment(left, right) {
+    if (!left || !right) return false;
+    return left.owner === right.owner && left.expression === right.expression;
+  }
+
+  function showMoment(moment) {
+    if (!moment?.expression) return;
     cancelHide();
     cancelContextEnrichment();
     const renderStartedAt = performance.now();
-    activeToken = token;
-    const expression = token.dataset.speakloopExpression || token.textContent.trim();
-    const lemma = token.dataset.speakloopLemma || dictionary.lemma(expression);
-    const cue = token.closest("[data-speakloop-caption-processed]");
-    const contextSentence = cue?.dataset.speakloopCaptionSource || expression;
+    activeMoment = moment;
+    const { expression, contextSentence } = moment;
+    const lemma = moment.lemma || dictionary.lemma(expression);
     const sentenceHash = contextHash(contextSentence);
     const cacheKey = `${lemma}::${sentenceHash}`;
     const basic = basicDictionaryCache.get(lemma) || dictionary.lookup(expression) || {
       lemma,
-      meaningZh: "本地词典暂未收录；可结合原句理解",
+      meaningZh: "翻译中…",
       pronunciation: "",
-      partOfSpeech: "word",
-      source: "local_fallback",
+      partOfSpeech: moment.sourceType === "webpage" && expression.includes(" ") ? "phrase" : "word",
+      source: "pending_lookup",
     };
-    basicDictionaryCache.set(lemma, basic);
+    if (basic.source !== "pending_lookup") basicDictionaryCache.set(lemma, basic);
     const contextual = contextLookupCache.get(cacheKey) || {};
     renderCard({ expression, contextSentence, ...basic, ...contextual });
     hoverCard.hidden = false;
-    positionCard(token);
+    positionCard(moment.anchor());
     hoverCard.dataset.hoverStartedAt = renderStartedAt.toFixed(2);
     hoverCard.dataset.basicRenderMs = (performance.now() - renderStartedAt).toFixed(2);
     window.requestAnimationFrame(() => {
-      if (activeToken === token) positionCard(token);
+      if (sameMoment(activeMoment, moment)) positionCard(moment.anchor());
     });
     if (!contextLookupCache.has(cacheKey)) {
-      scheduleContextEnrichment({ token, expression, lemma, contextSentence, sentenceHash, cacheKey, basic });
+      scheduleContextEnrichment({ moment, expression, lemma, contextSentence, sentenceHash, cacheKey, basic });
     }
   }
 
   function scheduleContextEnrichment({
-    token,
+    moment,
     expression,
     lemma,
     contextSentence,
@@ -356,7 +377,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }) {
     enrichmentTimer = window.setTimeout(async () => {
       enrichmentTimer = null;
-      if (activeToken !== token || hoverCard?.hidden) return;
+      if (!sameMoment(activeMoment, moment) || hoverCard?.hidden) return;
       const requestId = `hover_${Date.now()}_${++lookupSequence}`;
       activeContextRequestId = requestId;
       try {
@@ -371,9 +392,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (activeContextRequestId === requestId) activeContextRequestId = "";
         if (!response.success || !response.result) return;
         contextLookupCache.set(cacheKey, response.result);
-        if (activeToken !== token || hoverCard.hidden) return;
+        if (!sameMoment(activeMoment, moment) || hoverCard.hidden) return;
         renderCard({ expression, contextSentence, ...basic, ...response.result });
-        positionCard(token);
+        positionCard(moment.anchor());
       } catch {
         if (activeContextRequestId === requestId) activeContextRequestId = "";
       }
@@ -417,10 +438,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   async function saveActiveMoment() {
-    if (!activeToken) return;
-    const expression = activeToken.dataset.speakloopExpression || activeToken.textContent.trim();
-    const cue = activeToken.closest("[data-speakloop-caption-processed]");
-    const contextSentence = cue?.dataset.speakloopCaptionSource || expression;
+    if (!activeMoment) return;
+    const { expression, contextSentence, sourceType, captureMethod } = activeMoment;
     const save = hoverCard.querySelector("[data-slcc-save]");
     save.disabled = true;
     save.textContent = "Saving…";
@@ -429,15 +448,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         type: "speakloop:capture-moment",
         expression,
         contextSentence,
+        sourceType,
+        captureMethod,
         sourceTitle: document.title,
         sourceUrl: location.href,
       });
       if (!response.success) throw new Error(response.error || "Capture failed");
       savedExpressions.add(expression.toLowerCase());
-      save.textContent = "Saved to Moment Review";
+      save.textContent = "Saved to SpeakLoop";
     } catch {
       save.disabled = false;
-      save.textContent = "Start SpeakingLook, then try again";
+      save.textContent = "Start SpeakLoop, then try again";
     }
   }
 
@@ -493,11 +514,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       token.dataset.speakloopLemma = dictionary.lemma(piece);
       token.tabIndex = 0;
       token.setAttribute("role", "button");
-      token.setAttribute("aria-label", `Open SpeakingLook context card for ${piece}`);
+      token.setAttribute("aria-label", `Open SpeakLoop context card for ${piece}`);
       token.textContent = piece;
-      token.addEventListener("pointerenter", () => showCard(token));
+      token.addEventListener("pointerenter", () => showMoment(captionMoment(token)));
       token.addEventListener("pointerleave", handleTokenLeave);
-      token.addEventListener("focus", () => showCard(token));
+      token.addEventListener("focus", () => showMoment(captionMoment(token)));
       token.addEventListener("blur", handleTokenLeave);
       fragment.append(token);
     }
@@ -526,6 +547,98 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (scanFrame != null) return;
     scanFrame = window.requestAnimationFrame(scanCaptions);
   }
+
+  // --- Web page capture ---------------------------------------------------
+  // Captions were the only capturable surface. Reading is where most new
+  // vocabulary actually shows up, so the same card is now reachable from any
+  // page text: double-click a word, or select a phrase.
+
+  const MAX_SELECTION_WORDS = 12;
+
+  function insideOwnUi(node) {
+    const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    return Boolean(
+      element?.closest?.("[data-speakloop-caption-card], [data-speakloop-extension-toast]"),
+    );
+  }
+
+  function isEditableTarget(node) {
+    const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    return Boolean(element?.closest?.("input, textarea, [contenteditable=''], [contenteditable='true']"));
+  }
+
+  // The sentence the expression sits in, so the saved card keeps its meaning.
+  function enclosingSentence(range, fallback) {
+    const container = range.commonAncestorContainer;
+    const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+    const block = element?.closest?.("p, li, blockquote, h1, h2, h3, h4, td, dd, figcaption, article, section, div");
+    const blockText = String(block?.innerText || "").replace(/\s+/g, " ").trim();
+    if (!blockText) return fallback;
+    if (blockText.length <= 320) return blockText;
+
+    const selected = String(range.toString() || "").replace(/\s+/g, " ").trim();
+    const sentences = blockText.match(/[^.!?。！？]+[.!?。！？]*/g) || [blockText];
+    const hit = sentences.find((sentence) => sentence.includes(selected));
+    return (hit || blockText).trim().slice(0, 320);
+  }
+
+  function selectionMoment() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
+
+    const range = selection.getRangeAt(0);
+    if (insideOwnUi(range.commonAncestorContainer) || isEditableTarget(range.commonAncestorContainer)) {
+      return null;
+    }
+
+    const expression = String(selection.toString() || "").replace(/\s+/g, " ").trim();
+    if (!expression || expression.length > 500 || !/[A-Za-z]/.test(expression)) return null;
+    if (expression.split(/\s+/).length > MAX_SELECTION_WORDS) return null;
+
+    const rect = range.getBoundingClientRect();
+    if (!rect.width && !rect.height) return null;
+
+    return {
+      expression,
+      contextSentence: enclosingSentence(range, expression),
+      sourceType: "webpage",
+      captureMethod: "page_selection_card",
+      lemma: dictionary.lemma(expression),
+      anchor: () => {
+        const current = selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : rect;
+        return current.width || current.height ? current : rect;
+      },
+      owner: `selection:${expression}`,
+    };
+  }
+
+  function handlePageSelection() {
+    const moment = selectionMoment();
+    if (moment) {
+      showMoment(moment);
+      return;
+    }
+    // A click that clears the selection dismisses a selection card, but must
+    // not close a caption card the pointer is still hovering.
+    if (activeMoment?.sourceType === "webpage") hideCard();
+  }
+
+  document.addEventListener("dblclick", (event) => {
+    if (insideOwnUi(event.target) || isEditableTarget(event.target)) return;
+    // Let the browser finish extending the selection to the whole word.
+    window.setTimeout(handlePageSelection, 0);
+  });
+
+  document.addEventListener("mouseup", (event) => {
+    if (event.detail >= 2) return; // double-click is handled above
+    if (insideOwnUi(event.target) || isEditableTarget(event.target)) return;
+    window.setTimeout(handlePageSelection, 0);
+  });
+
+  document.addEventListener("keyup", (event) => {
+    if (!event.shiftKey || !event.key.startsWith("Arrow")) return;
+    handlePageSelection();
+  });
 
   const observer = new MutationObserver(scheduleScan);
   observer.observe(document.documentElement, {

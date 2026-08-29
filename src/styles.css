@@ -2419,3 +2419,121 @@ main {
     width: calc(100vw - 28px);
   }
 }
+
+/* Error card actions: status chip + practice entry */
+.error-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.error-card-actions button {
+  flex: 1 1 160px;
+  cursor: pointer;
+}
+
+.error-card-actions .error-status {
+  font-weight: 700;
+}
+
+.error-card-actions .error-status.recurring-error {
+  background: var(--red-soft);
+  border-color: rgba(255, 59, 48, 0.28);
+  color: var(--red);
+}
+
+.error-card-actions .error-status.practicing {
+  background: var(--blue-soft);
+  border-color: rgba(0, 122, 255, 0.28);
+  color: var(--blue);
+}
+
+.error-card-actions .error-status.improved {
+  background: rgba(52, 199, 89, 0.12);
+  border-color: rgba(52, 199, 89, 0.3);
+  color: #1c7a3d;
+}
+
+/* Captured vocabulary: source, context and translation state */
+.capture-inbox-note {
+  color: var(--text-soft, #6e6e73);
+  font-size: 0.92rem;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.asset-pronunciation {
+  color: var(--text-soft, #6e6e73);
+  font-size: 0.88rem;
+  margin: -4px 0 0;
+}
+
+.asset-context {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.asset-context small {
+  color: var(--text-soft, #6e6e73);
+  display: block;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.asset-context p {
+  margin: 0;
+}
+
+.meaning-zh.translating {
+  color: var(--blue);
+}
+
+.translation-failed {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.translation-failed p {
+  margin: 0;
+}
+
+.translation-failed button {
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.asset-source .source-chip {
+  background: var(--blue-soft);
+  border-radius: 999px;
+  color: var(--blue);
+  font-size: 0.76rem;
+  font-weight: 650;
+  margin-right: 6px;
+  padding: 3px 9px;
+}
+
+.capture-inbox-card {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}

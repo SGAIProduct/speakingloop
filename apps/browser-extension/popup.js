@@ -4,10 +4,10 @@ const lastExpression = document.querySelector("#last-expression");
 
 async function initialize() {
   try {
-    const data = await SpeakingLookApi.request("/api/vocabulary");
+    const data = await SpeakLoopApi.request("/api/vocabulary");
     status.textContent = `Connected · ${data.cards.length} saved expression${data.cards.length === 1 ? "" : "s"}`;
   } catch {
-    status.textContent = "SpeakingLook is offline. Start http://127.0.0.1:4173 first.";
+    status.textContent = "SpeakLoop is offline. Start http://127.0.0.1:4173 first.";
   }
 
   const stored = await chrome.storage.local.get("lastCapture");
@@ -18,7 +18,7 @@ async function initialize() {
 }
 
 document.querySelector("#open-library").addEventListener("click", async () => {
-  const base = await SpeakingLookApi.baseUrl();
+  const base = await SpeakLoopApi.baseUrl();
   chrome.tabs.create({ url: `${base}/?tab=assets` });
 });
 

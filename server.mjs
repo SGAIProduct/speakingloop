@@ -52,7 +52,6 @@ const {
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 4173);
 const root = process.cwd();
-const ollamaOrigin = process.env.OLLAMA_ORIGIN || "http://127.0.0.1:11434";
 const modelRouter = new ModelRouter();
 const contextLookupCache = new Map();
 const vocabularyStore = new VocabularyStore(
@@ -91,39 +90,6 @@ function sendJson(response, status, value) {
   send(response, status, JSON.stringify(value), {
     "Content-Type": "application/json; charset=utf-8",
   });
-}
-
-async function proxyOllama(request, response) {
-  const targetPath = request.url.replace(/^\/api\/ollama/, "");
-  const chunks = [];
-  for await (const chunk of request) {
-    chunks.push(chunk);
-  }
-
-  try {
-    const upstream = await fetch(`${ollamaOrigin}${targetPath}`, {
-      method: request.method,
-      headers: {
-        "Content-Type": request.headers["content-type"] || "application/json",
-      },
-      body: chunks.length ? Buffer.concat(chunks) : undefined,
-    });
-    const body = await upstream.arrayBuffer();
-    send(response, upstream.status, Buffer.from(body), {
-      "Content-Type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
-    });
-  } catch (error) {
-    send(
-      response,
-      503,
-      JSON.stringify({
-        error: "Ollama is not reachable",
-        detail: error.message,
-        fix: "Install/start Ollama, then run: ollama pull qwen3:8b",
-      }),
-      { "Content-Type": "application/json; charset=utf-8" },
-    );
-  }
 }
 
 async function readJson(request) {
@@ -225,7 +191,7 @@ ${transcript}`;
       input: {
         text: prompt,
         messages: [
-          { role: "system", content: "You are SpeakingLook's concise post-session speaking reviewer. Return valid JSON only." },
+          { role: "system", content: "You are SpeakLoop's concise post-session speaking reviewer. Return valid JSON only." },
           { role: "user", content: prompt },
         ],
       },
@@ -320,9 +286,9 @@ async function handleOpenAITTS(request, response) {
     send(response, 200, result.audio, {
       "Content-Type": result.contentType,
       "Cache-Control": "private, max-age=86400",
-      "X-SpeakingLook-Provider": "openai",
-      "X-SpeakingLook-Model": model,
-      "X-SpeakingLook-Cached": String(result.cached),
+      "X-SpeakLoop-Provider": "openai",
+      "X-SpeakLoop-Model": model,
+      "X-SpeakLoop-Cached": String(result.cached),
     });
   } catch (error) {
     modelRouter.logExternalCall({
@@ -421,7 +387,7 @@ async function handleVocabularyCapture(request, response) {
       cardId: captured.card.id,
       expression: captured.card.expression,
       expressionType: captured.card.expressionType,
-      message: captured.duplicate ? "Already in SpeakingLook" : "Added to SpeakingLook",
+      message: captured.duplicate ? "Already in SpeakLoop" : "Added to SpeakLoop",
       card: captured.card,
     });
   } catch (error) {
@@ -439,6 +405,8 @@ async function handleVocabularyEnhance(request, response) {
     }
 
     let enhancement = heuristicEnhancement(card);
+    let enhanced = false;
+    let enhancementError = "";
     try {
       const prompt = createVocabularyEnhancementPrompt(card);
       const result = await modelRouter.run({
@@ -463,13 +431,26 @@ async function handleVocabularyEnhance(request, response) {
           costSensitive: true,
         },
       });
+      if (!result.success) {
+        throw new Error(result.errorMessage || "OpenAI did not return a card");
+      }
       enhancement = parseEnhancement(result.result, card);
-    } catch {
-      // The heuristic card remains usable when the local model is unavailable.
+      enhanced = true;
+    } catch (error) {
+      // The heuristic card stays usable, but the UI is told the translation did
+      // not actually run so it can show a retry instead of a fake definition.
+      enhancementError = error.message;
     }
 
-    const updated = await vocabularyStore.updateCard(card.id, enhancement);
-    sendJson(response, 200, { success: true, cardId: card.id, card: updated, ...enhancement });
+    const updated = await vocabularyStore.updateCard(card.id, { ...enhancement, enhanced });
+    sendJson(response, enhanced ? 200 : 502, {
+      success: enhanced,
+      enhanced,
+      error: enhancementError || undefined,
+      cardId: card.id,
+      card: updated,
+      ...enhancement,
+    });
   } catch (error) {
     sendJson(response, 500, { success: false, error: error.message });
   }
@@ -672,19 +653,12 @@ createServer(async (request, response) => {
   if (url.pathname === "/api/health" && request.method === "GET") {
     sendJson(response, 200, {
       status: "ok",
-      product: "SpeakingLook",
+      product: "SpeakLoop",
       version: "0.1.0",
-      providers: {
-        openai: Boolean(process.env.OPENAI_API_KEY),
-        qwen: envDefaults.ENABLE_QWEN,
-      },
+      provider: "openai",
+      openAIConfigured: Boolean(process.env.OPENAI_API_KEY),
       uptimeSeconds: Math.round(process.uptime()),
     });
-    return;
-  }
-
-  if (request.url.startsWith("/api/ollama/")) {
-    await proxyOllama(request, response);
     return;
   }
 
@@ -764,9 +738,9 @@ createServer(async (request, response) => {
 
   await serveStatic(request, response);
 }).listen(port, host, () => {
-  console.log(`SpeakingLook running at http://${host}:${port}`);
+  console.log(`SpeakLoop running at http://${host}:${port}`);
   console.log(`OpenAI configured: ${Boolean(process.env.OPENAI_API_KEY)}`);
-  console.log("OpenAI-first model router enabled at /api/ai/chat");
+  console.log("OpenAI-only model path enabled at /api/ai/chat");
   console.log("OpenAI transcription enabled at /api/transcribe");
   console.log("Cached OpenAI TTS enabled at /api/tts");
   console.log("Global vocabulary capture enabled at /api/capture");
