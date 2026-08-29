@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#0b3a67"/>
+  <path d="M14 14h36v6H20v24h30v6H14z" fill="#d3ab63"/>
+  <text x="32" y="39" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#fff">YGK</text>
+</svg>

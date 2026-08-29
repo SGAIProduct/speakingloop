@@ -1,0 +1,17 @@
+{
+  "name": "speakinglook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI speaking repair and expression reuse system for hackathon demonstration.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test test/model-routing.test.mjs",
+    "smoke": "node scripts/smoke-test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

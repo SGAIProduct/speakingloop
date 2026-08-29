@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpeakingLook Caption Hover Fixture</title>
+    <link rel="stylesheet" href="content-script.css" />
+    <style>
+      * { box-sizing: border-box; }
+      body { background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 48px; }
+      main { margin: 0 auto; max-width: 980px; }
+      h1 { font-size: 34px; margin-bottom: 10px; }
+      main > p { color: #6e6e73; margin-bottom: 28px; }
+      .fixture-player { background: #101114; border-radius: 24px; height: 520px; overflow: hidden; position: relative; }
+      .fixture-player video { background: linear-gradient(135deg, #8fb9e9, #d8e8f8); display: block; height: 100%; width: 100%; }
+      .fixture-speaker { background: rgba(255,255,255,.28); border-radius: 50%; height: 220px; position: absolute; right: 110px; top: 70px; width: 220px; }
+      .course-video-caption { bottom: 82px; color: white; font-size: 30px; left: 50%; line-height: 1.35; max-width: 790px; position: absolute; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.8); transform: translateX(-50%); width: max-content; }
+      .course-video-caption::before { background: rgba(20,20,24,.82); content: ""; inset: -7px -10px; position: absolute; z-index: -1; }
+    </style>
+    <script>
+      const fixtureGlossary = {
+        service: { meaningZh: "服务", pronunciation: "/ˈsɜːrvɪs/", partOfSpeech: "noun" },
+        special: { meaningZh: "特殊的；特别的", pronunciation: "/ˈspeʃəl/", partOfSpeech: "adjective" },
+        spam: { meaningZh: "垃圾邮件", pronunciation: "/spæm/", partOfSpeech: "noun" },
+      };
+      window.fixtureMessages = [];
+      window.fixtureApiCheck = fetch("/api/context/dictionary-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expressions: ["special", "relativity"] }),
+      }).then(async (response) => ({ status: response.status, body: await response.json().catch(() => ({})) }));
+      window.chrome = {
+        runtime: {
+          lastError: null,
+          onMessage: { addListener() {} },
+          sendMessage(message, callback) {
+            window.fixtureMessages.push({ type: message.type, requestId: message.requestId || "", at: performance.now() });
+            if (message.type === "speakloop:preload-dictionary") {
+              const entries = {};
+              for (const expression of message.expressions || []) {
+                const lemma = String(expression).toLowerCase();
+                if (fixtureGlossary[lemma]) entries[lemma] = { lemma, ...fixtureGlossary[lemma] };
+              }
+              callback({ success: true, result: { entries } });
+              return;
+            }
+            if (message.type === "speakloop:lookup-moment") {
+              window.setTimeout(() => callback({
+                  success: true,
+                  result: {
+                    expression: message.expression,
+                    contextSentence: message.contextSentence,
+                    contextMeaningZh: "在这个句子中表示‘特别的’",
+                    phraseCandidates: ["special relativity"],
+                    ...(fixtureGlossary[message.expression.toLowerCase()] || { partOfSpeech: "word", meaningZh: "联系原句理解" }),
+                  },
+                }), 280);
+              return;
+            }
+            if (message.type === "speakloop:cancel-context-request") {
+              callback({ success: true, cancelled: true });
+              return;
+            }
+            callback({ success: true, result: { cardId: "fixture-card" } });
+          },
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Video caption hover verification</h1>
+      <p>Move the pointer over any subtitle word. The card must render outside the player’s clipped layer.</p>
+      <div class="fixture-player">
+        <video muted aria-label="Fixture video"></video>
+        <div class="fixture-speaker"></div>
+        <div class="course-video-caption">The way special relativity works is, you know, you go</div>
+      </div>
+    </main>
+    <script src="dictionary-data.js"></script>
+    <script src="content-script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpeakingLook Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <span>SL</span>
+      <div>
+        <strong>SpeakingLook Capture</strong>
+        <small>Every new word becomes a speaking asset.</small>
+      </div>
+    </header>
+    <main>
+      <p id="status">Checking local SpeakingLook...</p>
+      <section id="last-capture" hidden>
+        <small>Last captured</small>
+        <strong id="last-expression"></strong>
+      </section>
+      <button id="open-library" type="button">Open Vocabulary Library</button>
+    </main>
+    <script src="api.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

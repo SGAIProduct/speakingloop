@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "SpeakingLook Global Capture",
+  "version": "1.2.1",
+  "description": "Hover video captions and save complete language moments to SpeakingLook.",
+  "permissions": ["contextMenus", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1:4173/*", "http://localhost:4173/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "SpeakingLook Global Capture",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dictionary-data.js", "content-script.js"],
+      "css": ["content-script.css"],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_idle"
+    }
+  ]
+}
