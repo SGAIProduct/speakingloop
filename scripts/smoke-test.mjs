@@ -47,13 +47,23 @@ const fakeGemini = createServer(async (request, response) => {
     response.writeHead(404).end();
     return;
   }
-  for await (const _chunk of request) {
-    // Drain the request body.
-  }
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const parts = body?.contents?.flatMap((content) => content?.parts || []) || [];
+  const isTranscription = parts.some((part) => part?.inlineData?.data);
   response.writeHead(200, { "Content-Type": "application/json" });
   response.end(
     JSON.stringify({
-      candidates: [{ content: { parts: [{ text: reviewPayload() }] } }],
+      candidates: [{
+        content: {
+          parts: [{
+            text: isTranscription
+              ? "Yesterday I discussed the project with my manager."
+              : reviewPayload(),
+          }],
+        },
+      }],
       usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 80 },
     }),
   );
@@ -111,6 +121,20 @@ try {
     throw new Error(`Health endpoint did not report both providers: ${JSON.stringify(health.providers)}`);
   }
 
+  const transcription = await fetch(`${baseUrl}/api/transcribe`, {
+    method: "POST",
+    headers: { "Content-Type": "audio/webm;codecs=opus" },
+    body: Buffer.from("fake-browser-audio"),
+  });
+  const transcriptionResult = await transcription.json();
+  if (
+    !transcription.ok
+    || transcriptionResult.provider !== "gemini"
+    || transcriptionResult.text !== "Yesterday I discussed the project with my manager."
+  ) {
+    throw new Error(`Gemini transcription fallback failed: ${JSON.stringify(transcriptionResult)}`);
+  }
+
   const home = await fetch(baseUrl);
   if (!home.ok || !(await home.text()).includes("SpeakLoop")) {
     throw new Error("Product home page did not load");
@@ -163,7 +187,15 @@ try {
 
   console.log(JSON.stringify({
     success: true,
-    checks: ["health", "home", "protected-files", "webpage-capture", "vocabulary", "openai-quota-fallback-to-gemini"],
+    checks: [
+      "health",
+      "gemini-audio-transcription",
+      "home",
+      "protected-files",
+      "webpage-capture",
+      "vocabulary",
+      "openai-quota-fallback-to-gemini",
+    ],
     health,
   }, null, 2));
 } finally {

@@ -216,6 +216,7 @@ const state = {
   recording: false,
   voiceEnabled: true,
   openAIConfigured: false,
+  geminiConfigured: false,
   selectedVoiceURI: "Samantha",
   availableVoices: [],
   voiceStatus: canVoiceInput
@@ -1407,7 +1408,18 @@ async function speakText(text) {
       return;
     } catch (error) {
       stopSpeechOutput();
-      state.voiceStatus = `OpenAI voice unavailable · ${error.message}`;
+      if ("speechSynthesis" in window) {
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = "en-US";
+        utterance.rate = 0.94;
+        utterance.pitch = 1;
+        window.speechSynthesis.speak(utterance);
+        state.voiceStatus = "Playing with browser voice";
+        state.voiceTone = "success";
+        render();
+        return;
+      }
+      state.voiceStatus = `Voice unavailable · ${error.message}`;
       state.voiceTone = "warning";
       render();
     }
@@ -1438,8 +1450,8 @@ function stopVoiceInput() {
     }
   }
   state.recording = false;
-  state.voiceStatus = state.openAIConfigured && mediaRecorder
-    ? "Recording stopped · OpenAI is checking the transcript..."
+  state.voiceStatus = (state.openAIConfigured || state.geminiConfigured) && mediaRecorder
+    ? "Recording stopped · AI is checking the transcript..."
     : state.chatInput.trim()
       ? "Transcript ready · review it and send"
       : liveHeardAudio
@@ -1561,7 +1573,7 @@ function startLiveRecognitionCycle() {
 }
 
 async function transcribeRecording(blob, browserTranscript = "") {
-  if (!state.openAIConfigured) {
+  if (!state.openAIConfigured && !state.geminiConfigured) {
     state.chatInput = browserTranscript || state.chatInput;
     state.voiceStatus = state.chatInput
       ? "Transcript ready · browser live recognition"
@@ -1586,13 +1598,13 @@ async function transcribeRecording(blob, browserTranscript = "") {
     state.chatInput = String(data.text || "").trim() || browserTranscript;
     state.voiceStatus = state.chatInput
       ? `Transcript ready · ${data.provider} · ${data.model}`
-      : "OpenAI returned an empty transcript";
+      : "The transcription service returned an empty transcript";
     state.voiceTone = state.chatInput ? "success" : "warning";
   } catch (error) {
     state.chatInput = browserTranscript || state.chatInput;
     state.voiceStatus = state.chatInput
-      ? "Transcript ready · browser recognition (OpenAI check unavailable)"
-      : `OpenAI transcription unavailable · ${error.message}`;
+      ? "Transcript ready · browser recognition (server check unavailable)"
+      : `AI transcription unavailable · ${error.message}`;
     state.voiceTone = state.chatInput ? "success" : "warning";
   } finally {
     render();
@@ -1620,7 +1632,7 @@ async function startVoiceInput() {
     liveRecognitionActive = Boolean(SpeechRecognition);
     if (liveRecognitionActive) startLiveRecognitionCycle();
 
-    if (canRecordAudio && state.openAIConfigured) {
+    if (canRecordAudio && (state.openAIConfigured || state.geminiConfigured)) {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredType = [
         "audio/webm;codecs=opus",
@@ -1650,9 +1662,9 @@ async function startVoiceInput() {
 
     state.voiceStatus = SpeechRecognition
       ? "Listening · speak naturally, then click again to stop"
-      : state.openAIConfigured
+      : state.openAIConfigured || state.geminiConfigured
         ? "Recording continuously · click again to stop"
-        : "OpenAI API key is required for voice input in this browser";
+        : "A model API key is required for voice input in this browser";
     state.voiceTone = "success";
   } catch (error) {
     if (!SpeechRecognition) {
@@ -1683,23 +1695,30 @@ async function refreshOpenAIStatus() {
       data.modelEnv?.OPENAI_TEXT_MODEL_MID,
       data.modelEnv?.OPENAI_TEXT_MODEL_MINI,
       data.modelEnv?.OPENAI_TEXT_MODEL_STRONG,
+      data.modelEnv?.GEMINI_TEXT_MODEL_MID,
+      data.modelEnv?.GEMINI_TEXT_MODEL_MINI,
+      data.modelEnv?.GEMINI_TEXT_MODEL_STRONG,
     ].filter(Boolean);
     state.availableModels = Array.from(new Set([...models, ...defaultModels]));
     if (!state.availableModels.includes(state.selectedModel)) {
       state.selectedModel = data.modelEnv?.OPENAI_TEXT_MODEL_MID || defaultModels[0];
     }
-    state.preferredProvider = "openai";
     state.openAIConfigured = Boolean(data.openAIConfigured);
-    state.llmStatus = data.openAIConfigured
+    state.geminiConfigured = Boolean(data.providers?.gemini);
+    state.preferredProvider = state.openAIConfigured ? "openai" : state.geminiConfigured ? "gemini" : "openai";
+    state.llmStatus = state.openAIConfigured
       ? "OpenAI API key configured · GPT routing active"
-      : "OPENAI_API_KEY is missing on the server";
-    state.llmStatusTone = data.openAIConfigured ? "success" : "warning";
+      : state.geminiConfigured
+        ? "Gemini API key configured · free-tier routing active"
+        : "No model API key is configured on the server";
+    state.llmStatusTone = state.openAIConfigured || state.geminiConfigured ? "success" : "warning";
   } catch (error) {
     state.availableModels = [...defaultModels];
     state.selectedModel = defaultModels[0];
     state.preferredProvider = "openai";
     state.openAIConfigured = false;
-    state.llmStatus = "OpenAI router unavailable · start the SpeakLoop server";
+    state.geminiConfigured = false;
+    state.llmStatus = "Model router unavailable · start the SpeakLoop server";
     state.llmStatusTone = "warning";
   }
 

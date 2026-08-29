@@ -69,11 +69,11 @@ The application selects a provider based on available credentials and uses only 
 | Neither key is configured | Return an explicit error; never simulate a response |
 
 - Live coaching, corrections, and follow-up questions use the strong model route. Next-day reviews, weekly reports, and vocabulary cards use the lower-cost mini route. Both providers follow this split.
-- Speech recognition and text-to-speech are available **only through OpenAI**. If only Gemini is configured, microphone input and audio playback are unavailable, and the interface explains why.
+- Recorded speech is transcribed through OpenAI when available and falls back to Gemini when OpenAI has no quota. Read-aloud uses OpenAI TTS when available and otherwise uses the browser's local English voice.
 - If OpenAI returns `insufficient_quota`, the application automatically switches to Gemini and labels the response as a `fallback`. **No other error triggers a provider switch**; the actual error is displayed instead, because treating a network failure as a fallback would hide the underlying problem.
 - After a provider reports exhausted quota, the current process skips it for subsequent requests to avoid another failed round trip.
 
-Get a free Gemini API key at <https://aistudio.google.com/apikey>. The free tier supports up to 1,500 requests per day.
+Get a free Gemini API key at <https://aistudio.google.com/apikey>. Free-tier quotas vary by model and account.
 
 > An earlier version routed batch tasks to Qwen on a Nosana GPU. That route has been removed from the code.
 > `nosana/ollama.json` remains only as a historical deployment manifest and is not used by the current build.
@@ -102,7 +102,7 @@ npm run smoke
 curl http://127.0.0.1:4173/api/health
 ```
 
-Without an OpenAI API key, the interface, health checks, vocabulary capture, and review data flow still work. Live transcription, text-to-speech, and AI coaching require a valid OpenAI API key.
+With only a Gemini API key, text coaching, vocabulary capture, reviews, and recorded-speech transcription work. Read-aloud falls back to the browser voice. OpenAI remains optional for its own transcription and TTS routes.
 
 ## 5. Run with Docker
 

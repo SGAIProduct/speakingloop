@@ -307,72 +307,158 @@ async function handleOpenAITTS(request, response) {
   }
 }
 
-async function handleOpenAITranscription(request, response) {
+async function handleTranscription(request, response) {
   loadLocalEnv();
   const start = Date.now();
-  const model = modelEnv.OPENAI_TRANSCRIPTION_MODEL;
-  try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    const currentOpenAIOrigin = (process.env.OPENAI_BASE_URL || modelEnv.OPENAI_BASE_URL).replace(/\/$/, "");
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured");
-    }
-    const audio = await readBuffer(request);
-    if (!audio.length) {
-      sendJson(response, 400, { success: false, error: "Audio is required" });
-      return;
-    }
-    const contentType = request.headers["content-type"] || "audio/webm";
-    const extension = contentType.includes("mp4") ? "m4a" : contentType.includes("wav") ? "wav" : "webm";
-    const form = new FormData();
-    form.append("file", new Blob([audio], { type: contentType }), `speech.${extension}`);
-    form.append("model", model);
-    form.append("language", "en");
-    form.append(
-      "prompt",
-      "English speaking practice about product management, AI, interviews, meetings, and daily conversation.",
-    );
-
-    const upstream = await fetch(`${currentOpenAIOrigin}/audio/transcriptions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
-    });
-    if (!upstream.ok) {
-      const detail = await upstream.text();
-      throw new Error(detail || `OpenAI transcription returned ${upstream.status}`);
-    }
-    const data = await upstream.json();
-    const text = String(data.text || "").trim();
-    modelRouter.logExternalCall({
-      taskType: "live_transcription",
-      provider: "openai",
-      model,
-      latencyMs: Date.now() - start,
-      success: true,
-    });
-    sendJson(response, 200, {
-      success: true,
-      provider: "openai",
-      model,
-      text,
-      latencyMs: Date.now() - start,
-    });
-  } catch (error) {
-    modelRouter.logExternalCall({
-      taskType: "live_transcription",
-      provider: "openai",
-      model,
-      latencyMs: Date.now() - start,
-      success: false,
-      errorMessage: error.message,
-    });
-    sendJson(response, 503, {
-      success: false,
-      error: "OpenAI transcription is unavailable",
-      detail: error.message,
-    });
+  const available = providerAvailability();
+  const audio = await readBuffer(request);
+  if (!audio.length) {
+    sendJson(response, 400, { success: false, error: "Audio is required" });
+    return;
   }
+  if (audio.length > 20 * 1024 * 1024) {
+    sendJson(response, 413, { success: false, error: "Audio must be 20 MB or smaller" });
+    return;
+  }
+
+  const rawContentType = request.headers["content-type"] || "audio/webm";
+  const contentType = rawContentType.split(";", 1)[0].trim() || "audio/webm";
+  const attempts = [];
+
+  if (available.openai) {
+    const model = modelEnv.OPENAI_TRANSCRIPTION_MODEL;
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      const currentOpenAIOrigin = (process.env.OPENAI_BASE_URL || modelEnv.OPENAI_BASE_URL).replace(/\/$/, "");
+      const extension = contentType.includes("mp4") ? "m4a" : contentType.includes("wav") ? "wav" : "webm";
+      const form = new FormData();
+      form.append("file", new Blob([audio], { type: contentType }), `speech.${extension}`);
+      form.append("model", model);
+      form.append("language", "en");
+      form.append(
+        "prompt",
+        "English speaking practice about product management, AI, interviews, meetings, and daily conversation.",
+      );
+
+      const upstream = await fetch(`${currentOpenAIOrigin}/audio/transcriptions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+      if (!upstream.ok) {
+        const detail = await upstream.text();
+        throw new Error(detail || `OpenAI transcription returned ${upstream.status}`);
+      }
+      const data = await upstream.json();
+      const text = String(data.text || "").trim();
+      if (!text) throw new Error("OpenAI returned an empty transcript");
+      modelRouter.logExternalCall({
+        taskType: "live_transcription",
+        provider: "openai",
+        model,
+        latencyMs: Date.now() - start,
+        success: true,
+      });
+      sendJson(response, 200, {
+        success: true,
+        provider: "openai",
+        model,
+        text,
+        latencyMs: Date.now() - start,
+      });
+      return;
+    } catch (error) {
+      attempts.push(`OpenAI: ${error.message}`);
+      modelRouter.logExternalCall({
+        taskType: "live_transcription",
+        provider: "openai",
+        model,
+        latencyMs: Date.now() - start,
+        success: false,
+        errorMessage: error.message,
+      });
+    }
+  }
+
+  if (available.gemini) {
+    const model = modelEnv.GEMINI_TRANSCRIPTION_MODEL;
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      const currentGeminiOrigin = (process.env.GEMINI_BASE_URL || modelEnv.GEMINI_BASE_URL).replace(/\/$/, "");
+      const upstream = await fetch(
+        `${currentGeminiOrigin}/models/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "x-goog-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [{
+              role: "user",
+              parts: [
+                {
+                  text: "Transcribe the spoken English exactly. Return only the transcript as plain text, with no notes or quotation marks.",
+                },
+                {
+                  inlineData: {
+                    mimeType: contentType,
+                    data: audio.toString("base64"),
+                  },
+                },
+              ],
+            }],
+            generationConfig: {
+              temperature: 0,
+              maxOutputTokens: 600,
+              responseModalities: ["TEXT"],
+            },
+          }),
+        },
+      );
+      if (!upstream.ok) {
+        const detail = await upstream.text();
+        throw new Error(detail || `Gemini transcription returned ${upstream.status}`);
+      }
+      const data = await upstream.json();
+      const text = (data.candidates?.[0]?.content?.parts || [])
+        .map((part) => part?.text || "")
+        .join("")
+        .trim();
+      if (!text) throw new Error("Gemini returned an empty transcript");
+      modelRouter.logExternalCall({
+        taskType: "live_transcription",
+        provider: "gemini",
+        model,
+        latencyMs: Date.now() - start,
+        success: true,
+      });
+      sendJson(response, 200, {
+        success: true,
+        provider: "gemini",
+        model,
+        text,
+        latencyMs: Date.now() - start,
+      });
+      return;
+    } catch (error) {
+      attempts.push(`Gemini: ${error.message}`);
+      modelRouter.logExternalCall({
+        taskType: "live_transcription",
+        provider: "gemini",
+        model,
+        latencyMs: Date.now() - start,
+        success: false,
+        errorMessage: error.message,
+      });
+    }
+  }
+
+  sendJson(response, 503, {
+    success: false,
+    error: "Speech transcription is unavailable",
+    detail: attempts.join(" | ") || "No transcription provider is configured",
+  });
 }
 
 async function handleVocabularyCapture(request, response) {
@@ -679,7 +765,7 @@ createServer(async (request, response) => {
   }
 
   if (url.pathname === "/api/transcribe" && request.method === "POST") {
-    await handleOpenAITranscription(request, response);
+    await handleTranscription(request, response);
     return;
   }
 
@@ -747,7 +833,7 @@ createServer(async (request, response) => {
     console.log("WARNING: no model provider configured — coaching and vocabulary cards will fail.");
   }
   console.log("Model path enabled at /api/ai/chat (OpenAI preferred, Gemini fallback)");
-  console.log("OpenAI transcription enabled at /api/transcribe");
+  console.log("Provider-aware transcription enabled at /api/transcribe");
   console.log("Cached OpenAI TTS enabled at /api/tts");
   console.log("Global vocabulary capture enabled at /api/capture");
 });
